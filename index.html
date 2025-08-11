@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>MagicSign Inspector — マジックナンバー可視化・検証ツール (MVP)</title>
+  <meta name="description" content="ファイルシグネチャ（マジックナンバー）を可視化・編集・検証する軽量フォレンジック補助ツール。ブラウザー内で完結、外部送信なし。" />
+  <link rel="icon" href="assets/favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- =========================================================
+       Header
+  ========================================================== -->
+  <header class="app-header" role="banner">
+    <div>
+      <div class="brand">
+        <img src="assets/logo.svg" alt="MagicSign Inspector ロゴ" class="logo" />
+        <div class="titles">
+          <h1>MagicSign Inspector</h1>
+          <p class="subtitle">ファイルシグネチャ（マジックナンバー）可視化・検証ツール</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <label class="theme-toggle" title="ダークモード切替">
+          <input type="checkbox" id="toggleTheme" aria-label="ダークモード切替" />
+          <span class="toggle-ui" aria-hidden="true"></span>
+          <span class="toggle-text">Dark</span>
+        </label>
+      </div>
+    </div>
+    <!-- Tabs in Header -->
+    <div class="mobile-tab-hint" id="mobileTabHint">
+      <span class="hint-text">← スワイプでタブ移動 →</span>
+    </div>
+    <nav class="main-tabs" role="tablist" aria-label="機能タブ">
+      <button class="main-tab active" data-tab="signatures" role="tab" aria-selected="true" aria-controls="tab-signatures">📝 シグネチャ一覧</button>
+      <button class="main-tab" data-tab="inspect" role="tab" aria-selected="false" aria-controls="tab-inspect">🔍 検査</button>
+      <button class="main-tab" data-tab="edit" role="tab" aria-selected="false" aria-controls="tab-edit">✏️ 編集</button>
+      <button class="main-tab" data-tab="dictio" role="tab" aria-selected="false" aria-controls="tab-dictio">📁 辞書 I/O</button>
+      <button class="main-tab" data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings">⚙️ 設定/ヘルプ</button>
+    </nav>
+  </header>
+
+  <!-- =========================================================
+       Main Layout - Single Column with Content
+  ========================================================== -->
+  <main class="layout" role="main">
+
+    <!-- Panels -->
+    <div class="tab-panels">
+      <!-- ---------- Signatures Panel ---------- -->
+      <section id="tab-signatures" class="tab-panel active" role="tabpanel" aria-labelledby="シグネチャ一覧">
+        <div class="pane-head">
+          <div class="filters">
+            <input id="sigSearch" type="search" placeholder="名前・拡張子・カテゴリで検索…" aria-label="シグネチャ検索" />
+            <label class="inline">
+              <input id="filterEnabled" type="checkbox" checked />
+              有効のみ
+            </label>
+            <select id="filterCategory" aria-label="カテゴリで絞り込み">
+              <option value="">すべてのカテゴリ</option>
+              <option value="image">image</option>
+              <option value="archive">archive</option>
+              <option value="doc">doc</option>
+              <option value="audio">audio</option>
+              <option value="video">video</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sig-table-wrap">
+          <table class="sig-table" aria-describedby="sigHelp">
+            <thead>
+              <tr>
+                <th style="width: 60px;">有効</th>
+                <th style="min-width: 180px;">名前</th>
+                <th style="width: 100px;">拡張子</th>
+                <th style="min-width: 250px;">パターン</th>
+                <th style="width: 100px;">オフセット</th>
+                <th style="width: 100px;">カテゴリ</th>
+                <th style="width: 80px;">信頼度</th>
+                <th style="width: 80px;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="sigTbody">
+              <!-- script.js で埋め込み -->
+            </tbody>
+          </table>
+          <p id="sigHelp" class="muted small">
+            クリックで選択。「編集」タブに反映されます。
+          </p>
+        </div>
+
+        <div class="sig-actions">
+          <button id="addSignatureBtn" class="btn">+ 新規シグネチャ</button>
+          <button id="duplicateSignatureBtn" class="btn">複製</button>
+          <button id="deleteSignatureBtn" class="btn danger">削除</button>
+        </div>
+      </section>
+
+      <!-- ---------- Inspect Panel ---------- -->
+      <section id="tab-inspect" class="tab-panel" role="tabpanel" aria-labelledby="検査">
+          <div class="drop-area" id="dropArea" tabindex="0" aria-label="ファイルをドロップして解析">
+            <div class="drop-content">
+              <svg class="drop-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <p class="drop-title">ファイルをドロップ</p>
+              <p class="drop-or">または</p>
+              <button id="openFileBtn" class="btn primary" aria-label="ファイルを選択">ファイルを選択</button>
+              <input id="fileInput" type="file" hidden />
+              <p class="muted small">解析はブラウザー内のみで実行され、外部送信は行いません</p>
+            </div>
+          </div>
+
+          <!-- File Information Panel -->
+          <div id="fileInfoPanel" class="file-info-panel" style="display: none;">
+            <h3>📋 ファイル情報</h3>
+            <div class="file-info-grid">
+              <div class="file-info-basic">
+                <h4>基本情報</h4>
+                <div class="info-row">
+                  <span class="info-label">ファイル名:</span>
+                  <span class="info-value" id="fileInfoName">-</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">ファイルサイズ:</span>
+                  <span class="info-value" id="fileInfoSize">-</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">最終更新:</span>
+                  <span class="info-value" id="fileInfoModified">-</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">MIMEタイプ:</span>
+                  <span class="info-value" id="fileInfoType">-</span>
+                </div>
+              </div>
+              
+              <div class="file-info-hashes">
+                <h4>ハッシュ値 <span class="hash-status" id="hashStatus">計算中...</span></h4>
+                <div class="info-row">
+                  <span class="info-label">MD5:</span>
+                  <span class="info-value hash-value" id="fileInfoMD5">
+                    <span class="hash-loading">⏳ 計算中...</span>
+                  </span>
+                  <button class="btn-copy-hash" data-hash="md5" title="MD5をコピー">📋</button>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">SHA1:</span>
+                  <span class="info-value hash-value" id="fileInfoSHA1">
+                    <span class="hash-loading">⏳ 計算中...</span>
+                  </span>
+                  <button class="btn-copy-hash" data-hash="sha1" title="SHA1をコピー">📋</button>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">SHA256:</span>
+                  <span class="info-value hash-value" id="fileInfoSHA256">
+                    <span class="hash-loading">⏳ 計算中...</span>
+                  </span>
+                  <button class="btn-copy-hash" data-hash="sha256" title="SHA256をコピー">📋</button>
+                </div>
+              </div>
+              
+              <div class="file-info-analysis">
+                <h4>分析結果</h4>
+                <div class="info-row">
+                  <span class="info-label">エントロピー:</span>
+                  <span class="info-value" id="fileInfoEntropy">
+                    <span class="entropy-loading">⏳ 計算中...</span>
+                  </span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">検出パターン:</span>
+                  <span class="info-value" id="fileInfoPatterns">スキャン待ち</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">推定形式:</span>
+                  <span class="info-value" id="fileInfoFormat">解析中...</span>
+                </div>
+                <div class="info-row" id="exifCheckRow" style="display: none;">
+                  <span class="info-label">Exif情報:</span>
+                  <span class="info-value">
+                    <a href="https://ipusiron.github.io/image-exif-checker/" 
+                       target="_blank" 
+                       class="exif-check-link"
+                       title="Image Exif CheckerでExif情報を確認">
+                      <span class="exif-icon">📸</span>
+                      <span class="exif-text">Exif情報を確認</span>
+                      <span class="external-icon">↗</span>
+                    </a>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="inspect-controls">
+            <label>スキャン範囲
+              <select id="scanRange">
+                <option value="head64">先頭 64MB</option>
+                <option value="head128">先頭 128MB</option>
+                <option value="headTail">先頭 + 末尾</option>
+                <option value="full">全文（大容量は時間がかかる場合あり）</option>
+              </select>
+            </label>
+            <button id="startScanBtn" class="btn primary">スキャン開始</button>
+            <button id="cancelScanBtn" class="btn" disabled>キャンセル</button>
+            <div id="progressWrap" class="progress-wrap" aria-live="polite" aria-atomic="true" hidden>
+              <div class="progress-bar" id="progressBar" style="width:0%"></div>
+              <span id="progressText" class="progress-text">0%</span>
+            </div>
+          </div>
+
+          <div class="inspect-grid">
+            <div class="hits">
+              <h3>ヒット一覧</h3>
+              <table class="hits-table">
+                <thead>
+                  <tr>
+                    <th>シグネチャ</th>
+                    <th>開始オフセット</th>
+                    <th>長さ</th>
+                    <th>信頼度</th>
+                    <th>備考</th>
+                  </tr>
+                </thead>
+                <tbody id="hitsTbody">
+                  <!-- script.js で埋め込み -->
+                </tbody>
+              </table>
+              <p class="muted small" style="margin-top:8px;">
+                <span class="desktop-hint">クリックで個別選択・HEXハイライト、再クリックで全体表示に戻る</span>
+                <span class="mobile-hint">タップで選択・ハイライト、長押しで詳細表示</span>
+              </p>
+            </div>
+
+            <div class="hex">
+              <h3>HEXビュー</h3>
+              <div class="hex-toolbar">
+                <label>幅
+                  <select id="hexWidth">
+                    <option value="16">16</option>
+                    <option value="32">32</option>
+                  </select>
+                </label>
+                <div class="hex-copy-buttons">
+                  <button id="copyHexBtn" class="btn btn-copy" title="選択範囲を16進数でコピー" disabled>
+                    <span class="icon">🔖</span>
+                    <span class="text">HEX</span>
+                  </button>
+                  <button id="copyAsciiBtn" class="btn btn-copy" title="選択範囲をASCIIでコピー" disabled>
+                    <span class="icon">📝</span>
+                    <span class="text">ASCII</span>
+                  </button>
+                  <button id="copyBytesBtn" class="btn btn-copy" title="選択範囲を生バイトでコピー" disabled>
+                    <span class="icon">⚡</span>
+                    <span class="text">RAW</span>
+                  </button>
+                </div>
+                <button id="jumpPrev" class="btn">← 前ヒット</button>
+                <button id="jumpNext" class="btn">次ヒット →</button>
+                <label class="grow">
+                  ジャンプ（オフセット 10進/0x16進）
+                  <input id="jumpOffset" type="text" placeholder="例: 4096 または 0x1000" />
+                </label>
+                <button id="jumpGo" class="btn">移動</button>
+              </div>
+              <div id="hexView" class="hexview" role="region" aria-label="HEXビュー" tabindex="0">
+                <!-- js/hexview.js が描画 -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- Edit Panel ---------- -->
+        <section id="tab-edit" class="tab-panel" role="tabpanel" aria-labelledby="編集">
+          <h3>シグネチャ編集</h3>
+          <p class="tab-description">
+            ファイル形式を識別するためのバイトパターン（シグネチャ）を新規作成・編集できます。
+            シグネチャ一覧で選択した項目がここに表示され、パターンやオフセットなどの詳細設定が可能です。<br>
+            <strong>💾 保存先：</strong> 編集内容はブラウザーのローカルストレージに自動保存されます（外部送信なし）。
+          </p>
+          <form id="sigForm" class="sig-form">
+            <div class="form-grid">
+              <label title="シグネチャの識別名。わかりやすい名前を付けてください。">名前 ❓
+                <input id="f_name" type="text" required placeholder="例: JPEG (SOI)" title="ファイル形式やシグネチャの目的を示す名前" />
+              </label>
+
+              <label title="このシグネチャに関連するファイル拡張子をカンマで区切って入力">拡張子（カンマ区切り） ❓
+                <input id="f_ext" type="text" placeholder="jpg,jpeg" title="関連するファイル拡張子（例: jpg,jpeg,jpe）" />
+              </label>
+
+              <label title="ファイル形式の分類カテゴリを選択">カテゴリ ❓
+                <select id="f_cat" title="image:画像, archive:圧縮, doc:文書, audio:音声, video:動画, other:その他">
+                  <option value="image">image</option>
+                  <option value="archive">archive</option>
+                  <option value="doc">doc</option>
+                  <option value="audio">audio</option>
+                  <option value="video">video</option>
+                  <option value="other">other</option>
+                </select>
+              </label>
+
+              <label title="シグネチャの検索位置の指定方法">オフセット種別 ❓
+                <select id="f_off_type" title="absolute:ファイル先頭からの固定位置, relative:他のシグネチャからの相対位置">
+                  <option value="absolute">absolute</option>
+                  <option value="relative">relative</option>
+                </select>
+              </label>
+
+              <label title="ファイル先頭からの検索開始位置（バイト数）">オフセット値（absolute時） ❓
+                <input id="f_off_value" type="number" min="0" step="1" placeholder="0" title="0=ファイル先頭, 1024=ファイル先頭から1024バイト後" />
+              </label>
+
+              <label title="相対位置の基準となるシグネチャ名">相対From（relative時） ❓
+                <input id="f_off_from" type="text" placeholder="例: EOCD, SOI, label-xyz" title="基準となる他のシグネチャの名前またはラベル" />
+              </label>
+
+              <label title="基準シグネチャからのオフセット（正負の整数）">相対Delta（relative時） ❓
+                <input id="f_off_delta" type="number" step="1" placeholder="+512 など" title="+値で後方, -値で前方への移動（バイト数）" />
+              </label>
+
+              <label title="検索するバイトパターン（16進数、ワイルドカード、範囲指定が可能）">パターン（HEX・??・[00-1F]可、空白区切り） ❓
+                <input id="f_pattern" type="text" required placeholder="例: FF D8 FF E0 ?? ?? 4A 46 49 46" title="FF=固定バイト, ??=任意の1バイト, [00-1F]=範囲指定" />
+              </label>
+
+              <label title="ファイル終端に期待されるバイトパターン（省略可能）">トレーラ（任意） ❓
+                <input id="f_trailer" type="text" placeholder="例: FF D9" title="ファイル終端のシグネチャ（例: JPEG終端のFFD9）" />
+              </label>
+
+              <label title="このシグネチャを持つファイルの最小サイズ（バイト）">min_size（任意） ❓
+                <input id="f_min" type="number" min="0" step="1" placeholder="例: 100" title="誤検知を防ぐための最小ファイルサイズ制限" />
+              </label>
+
+              <label title="このシグネチャを持つファイルの最大サイズ（バイト）">max_size（任意） ❓
+                <input id="f_max" type="number" min="0" step="1" placeholder="例: 20000000" title="誤検知を防ぐための最大ファイルサイズ制限" />
+              </label>
+
+              <label title="このシグネチャの検出精度（0-100%）">信頼度（0–100） ❓
+                <input id="f_conf" type="number" min="0" max="100" step="1" value="80" title="90%以上=高精度, 70%以上=中精度, 50%以上=低精度" />
+              </label>
+
+              <label class="span-2" title="シグネチャに関する補足情報や注意事項">備考 ❓
+                <textarea id="f_notes" rows="3" placeholder="例: trailerは任意。誤検知注意など" title="使用上の注意点、特徴、制限事項など"></textarea>
+              </label>
+
+              <label class="inline checkbox-label" title="このシグネチャをスキャンで使用するかどうか">
+                <input id="f_enabled" type="checkbox" checked title="チェック=スキャンで使用, 未チェック=無効化" />
+                <span class="checkbox-text">有効 ❓</span>
+              </label>
+            </div>
+
+            <div class="form-actions">
+              <button id="saveSigBtn" class="btn primary" type="submit">保存</button>
+              <button id="resetSigBtn" class="btn" type="button">元に戻す</button>
+              <button id="testSigBtn" class="btn" type="button">擬似マッチをプレビュー</button>
+            </div>
+          </form>
+
+          <section class="preview-box" aria-live="polite">
+            <h4>プレビュー</h4>
+            <div id="previewResult" class="preview-result muted">
+              パターンに基づく擬似マッチ結果がここに表示されます。
+            </div>
+          </section>
+        </section>
+
+        <!-- ---------- Dictionary I/O Panel ---------- -->
+        <section id="tab-dictio" class="tab-panel" role="tabpanel" aria-labelledby="辞書 I/O">
+          <h3>辞書 I/O</h3>
+          <p class="tab-description">
+            シグネチャ辞書の外部ファイルとの入出力を行います。
+            JSONファイルでバックアップ・復元したり、foremost.confファイルを生成してファイルカービングツールで使用できます。
+          </p>
+          <div class="dictio-grid">
+            <div class="box">
+              <h4>インポート</h4>
+              <p class="muted small">JSON（本ツール形式）／foremost.conf／scalpel.conf（サブセット）</p>
+              <input id="importFile" type="file" accept=".json,.conf,.txt" />
+              <button id="importBtn" class="btn">インポート</button>
+            </div>
+
+            <div class="box">
+              <h4>エクスポート</h4>
+              <label>対象
+                <select id="exportScope">
+                  <option value="all">全件</option>
+                  <option value="enabled">有効のみ</option>
+                </select>
+              </label>
+              <div class="export-actions">
+                <button id="exportJsonBtn" class="btn">JSON をダウンロード</button>
+                <button id="exportForemostBtn" class="btn">foremost.conf を生成</button>
+              </div>
+            </div>
+
+            <div class="box">
+              <h4>マージポリシー</h4>
+              <label>重複時の扱い
+                <select id="mergePolicy">
+                  <option value="keep-both">両方保持</option>
+                  <option value="replace">置換（新規で上書き）</option>
+                  <option value="merge">併合（拡張子・備考などを統合）</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------- Settings/Help Panel ---------- -->
+        <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="設定/ヘルプ">
+          <h3>設定 / ヘルプ</h3>
+
+          <!-- View Settings Accordion -->
+          <details class="help-details" open>
+            <summary>ビュー設定</summary>
+            <div class="help-content">
+              <div class="settings-content">
+                <label class="inline setting-select" title="HEXビューで1行に表示するバイト数を選択できます">
+                  <span>HEX行幅 ❓</span>
+                  <select id="setHexWidth" title="16バイト: コンパクト表示、32バイト: ワイド表示">
+                    <option value="16">16バイト</option>
+                    <option value="32">32バイト</option>
+                  </select>
+                </label>
+                <label class="inline setting-checkbox" title="シグネチャの編集内容をブラウザーのローカルストレージに自動保存するかどうか">
+                  <input id="setAutosave" type="checkbox" checked title="チェック=自動保存有効、未チェック=手動保存のみ" />
+                  <span>自動保存（localStorage） ❓</span>
+                </label>
+                <label class="inline setting-checkbox" title="オペレーティングシステムのライト/ダークテーマ設定に自動で連動するかどうか">
+                  <input id="setFollowOS" type="checkbox" checked title="チェック=OS設定に従う、未チェック=手動でダーク/ライト切り替え" />
+                  <span>OSテーマを追従 ❓</span>
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <!-- Keyboard Shortcuts Accordion -->
+          <details class="help-details">
+            <summary>キーボード操作</summary>
+            <div class="help-content">
+              <div class="keyboard-shortcuts-grid">
+                <div class="shortcuts-column">
+                  <h5>基本操作</h5>
+                  <ul class="kbd-list">
+                    <li><kbd>Ctrl/Cmd</kbd> + <kbd>O</kbd> : ファイルを開く</li>
+                    <li><kbd>F</kbd> : 次のヒットへ移動</li>
+                    <li><kbd>Shift</kbd> + <kbd>F</kbd> : 前のヒットへ</li>
+                    <li><kbd>G</kbd> : オフセットジャンプ</li>
+                    <li><kbd>E</kbd> : 選択中シグネチャを編集</li>
+                    <li><kbd>/</kbd> : シグネチャ検索へフォーカス</li>
+                    <li><kbd>?</kbd> : このヘルプを開く</li>
+                  </ul>
+                </div>
+                
+                <div class="shortcuts-column">
+                  <h5>HEXビュー操作</h5>
+                  <ul class="kbd-list">
+                    <li><kbd>Ctrl/Cmd</kbd> + <kbd>C</kbd> : 16進数をコピー</li>
+                    <li><kbd>Ctrl/Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> : ASCIIをコピー</li>
+                    <li><kbd>Ctrl/Cmd</kbd> + <kbd>Alt</kbd> + <kbd>C</kbd> : 生バイトをコピー</li>
+                    <li><kbd>Ctrl/Cmd</kbd> + <kbd>A</kbd> : すべて選択</li>
+                    <li><kbd>Ctrl/Cmd</kbd> + <kbd>G</kbd> : オフセットへジャンプ</li>
+                    <li><kbd>Esc</kbd> : 選択解除</li>
+                    <li><strong>マウス</strong> : ドラッグで範囲選択、右クリックでメニュー</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <!-- Security and Privacy Accordion -->
+          <details class="help-details">
+            <summary>セキュリティとプライバシー</summary>
+            <div class="help-content">
+              <p>
+                解析はブラウザー内で完結し、ファイルの外部送信は行いません。<br />
+                大容量ファイルはチャンク処理でメモリ消費を抑えます。<br />
+                エクスポートする辞書ファイルに機微情報（検体名等）を記載しないでください。
+              </p>
+            </div>
+          </details>
+
+          <details class="help-details">
+            <summary><code>file</code> コマンド（magic file）との関連</summary>
+            <div class="help-content">
+              <p>
+                Unix系OSの <code>file</code> コマンドは、拡張子ではなく <strong>magic file</strong> に登録されたバイトパターンでファイル種別を判定します。
+              </p>
+              <p>
+                <strong>MagicSign Inspector</strong> は、この仕組みに類する <strong>マジックナンバー定義を読み込み、任意のバイナリへ照合</strong> します。GUI/ブラウザーでの辞書作成・調整にご活用ください。
+              </p>
+              <div class="info-box">
+                <h5>📋 活用例</h5>
+                <ul>
+                  <li>既存のmagic fileパターンの検証・テスト</li>
+                  <li>カスタムシグネチャの作成・調整</li>
+                  <li>ファイル識別の精度向上</li>
+                </ul>
+              </div>
+            </div>
+          </details>
+        </section>
+      </div>
+  </main>
+
+  <!-- =========================================================
+       Footer (プロジェクト共通フォーマット)
+  ========================================================== -->
+  <footer>
+    <div class="footer">
+      🔗 GitHubリポジトリはこちら（ <a href="https://github.com/ipusiron/magic-sign-inspector" target="_blank" rel="noopener">ipusiron/magic-sign-inspector</a> ）
+    </div>
+  </footer>
+
+  <!-- =========================================================
+       Modals (ヒット詳細／新規テンプレート選択 など)
+  ========================================================== -->
+  <dialog id="hitDetailModal" class="modal">
+    <form method="dialog">
+      <header class="modal-head">
+        <h3>ヒット詳細</h3>
+        <button class="icon-btn" value="cancel" aria-label="閉じる">✕</button>
+      </header>
+      <section class="modal-body">
+        <div id="hitDetailMeta" class="meta"></div>
+        <div id="hitDetailHex" class="hexview small"></div>
+      </section>
+      <menu class="modal-actions">
+        <button value="cancel" class="btn">閉じる</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <dialog id="addTemplateModal" class="modal">
+    <form method="dialog">
+      <header class="modal-head">
+        <h3>テンプレートから追加</h3>
+        <button class="icon-btn" value="cancel" aria-label="閉じる">✕</button>
+      </header>
+      <section class="modal-body grid">
+        <button class="template-card" data-template="image">画像（JPEG/PNG/GIF…）</button>
+        <button class="template-card" data-template="archive">アーカイブ（ZIP/7z/RAR…）</button>
+        <button class="template-card" data-template="doc">文書（PDF/OOXML…）</button>
+        <button class="template-card" data-template="other">その他（custom）</button>
+      </section>
+      <menu class="modal-actions">
+        <button value="cancel" class="btn">閉じる</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <!-- =========================================================
+       Loading Overlay
+  ========================================================== -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">処理中...</div>
+  </div>
+
+  <!-- =========================================================
+       Scripts
+  ========================================================== -->
+  <script>
+    // キーボードショートカット
+    document.addEventListener('keydown', (e) => {
+      // Skip if user is typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        return;
+      }
+      
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      
+      // File open: Ctrl/Cmd + O
+      if ((isMac && e.metaKey && e.key.toLowerCase() === 'o') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'o')) {
+        e.preventDefault();
+        document.getElementById('fileInput').click();
+      }
+      
+      // Help: ? key
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        // Switch to settings/help tab
+        const helpTab = document.querySelector('[data-tab="settings"]');
+        if (helpTab) {
+          helpTab.click();
+        }
+      }
+      
+      // Navigate to signatures search: /
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const sigTab = document.querySelector('[data-tab="signatures"]');
+        const searchInput = document.getElementById('sigSearch');
+        if (sigTab && searchInput) {
+          sigTab.click();
+          setTimeout(() => searchInput.focus(), 100);
+        }
+      }
+      
+      // Edit selected signature: E
+      if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const editTab = document.querySelector('[data-tab="edit"]');
+        if (editTab) {
+          editTab.click();
+        }
+      }
+      
+      // Next/Previous hit navigation: F/Shift+F
+      if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          document.getElementById('jumpPrev')?.click();
+        } else {
+          document.getElementById('jumpNext')?.click();
+        }
+      }
+      
+      // Jump to offset: G
+      if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const jumpInput = document.getElementById('jumpOffset');
+        if (jumpInput) {
+          jumpInput.focus();
+          jumpInput.select();
+        }
+      }
+      
+      // HEX view keyboard shortcuts (when hex view is active)
+      const currentTab = document.querySelector('.main-tab.active')?.dataset?.tab;
+      if (currentTab === 'inspect') {
+        const hexView = document.getElementById('hexView');
+        
+        // Copy hex: Ctrl+C 
+        if ((isMac && e.metaKey && e.key.toLowerCase() === 'c') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'c')) {
+          // Check if we're in a text input field
+          if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !e.target.isContentEditable) {
+            e.preventDefault();
+            // Trigger HEX view copy functionality
+            if (window.STATE && window.STATE.hex) {
+              if (e.shiftKey) {
+                window.STATE.hex.copySelection('ascii');
+              } else if (e.altKey) {
+                window.STATE.hex.copySelection('bytes');
+              } else {
+                window.STATE.hex.copySelection('hex');
+              }
+            }
+          }
+        }
+        
+        // Select all in hex view: Ctrl+A
+        if ((isMac && e.metaKey && e.key.toLowerCase() === 'a') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'a')) {
+          if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !e.target.isContentEditable) {
+            e.preventDefault();
+            if (window.STATE && window.STATE.hex) {
+              window.STATE.hex.selectAll();
+            }
+          }
+        }
+        
+        // Jump to offset in hex view: Ctrl+G
+        if ((isMac && e.metaKey && e.key.toLowerCase() === 'g') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'g')) {
+          if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !e.target.isContentEditable) {
+            e.preventDefault();
+            if (window.STATE && window.STATE.hex) {
+              window.STATE.hex.showJumpDialog();
+            }
+          }
+        }
+      }
+    });
+  </script>
+  <script src="js/fileinfo.js"></script>
+  <script src="js/hexview.js" type="module"></script>
+  <script src="js/app.js" type="module"></script>
+</body>
+</html>
