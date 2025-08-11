@@ -1,0 +1,6 @@
+# ChatGPT/Claude用のローカル設定ファイル
+.claude/
+
+node_modules/
+.DS_Store
+*.log
