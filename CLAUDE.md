@@ -8,19 +8,47 @@ MagicSign Inspector is a browser-based forensic assistance tool for visualizing,
 
 ## Architecture
 
-### Core Components
+### Module Structure
 
-- **Frontend-only application**: Pure HTML/CSS/JavaScript with no backend dependencies
-- **Module structure**: Uses ES6 modules (`type="module"`) and Web Workers for background processing
-- **File signature dictionary**: JSON-based signature definitions stored in `sigs/default.json`
-- **Hex viewer**: Custom implementation in `js/hexview.js` for binary data visualization with highlighting
-- **Worker-based scanning**: Background processing via `js/worker.js` for non-blocking file analysis
+```
+js/app.js        # Main application (~1,400 lines): UI state, file handling, scanning orchestration
+js/hexview.js    # HexView class: virtual scrolling hex viewer with selection/copy support
+js/worker.js     # Web Worker: background signature pattern matching
+js/fileinfo.js   # File info panel: hash calculation (MD5/SHA1/SHA256), entropy analysis
+```
+
+### Data Flow
+
+1. User drops/selects file → `openFile()` reads via FileReader (chunked for >50MB)
+2. File buffer stored in `STATE.buffer`, passed to `HexView.setBuffer()`
+3. User clicks "Scan" → Worker receives buffer + enabled signatures
+4. Worker performs pattern matching, posts progress/results back
+5. Results rendered in hits table, highlights applied to HexView
 
 ### Key Technical Details
 
-- **CORS requirements**: Application uses `fetch()` to load JSON dictionaries, requiring HTTP server (not `file://`)
-- **No build process**: Static files served directly, no compilation or bundling required
-- **localStorage**: Used for persisting user settings and custom signatures
+- **ES6 Modules**: `hexview.js` uses `export class`, `app.js` uses `import`
+- **Web Workers**: `worker.js` runs signature matching off main thread
+- **Virtual Scrolling**: HexView only renders visible rows (~20) for large files
+- **CORS**: Requires HTTP server - `fetch()` used for loading `sigs/*.json`
+- **localStorage**: Persists signature dictionary under key `msi_dict`
+
+### Signature Format
+
+Signatures in `sigs/*.json` follow this structure:
+```json
+{
+  "id": "sig-jpeg-soi",
+  "name": "JPEG (SOI)",
+  "pattern": "FF D8 FF E0 ?? ?? 4A 46 49 46",  // Space-separated hex, ?? = wildcard, [00-1F] = range
+  "offset": { "type": "absolute", "value": 0 },  // or "relative" with from/delta
+  "trailer": "FF D9",  // Optional end-of-file pattern
+  "confidence": 95,
+  "extensions": ["jpg", "jpeg"],
+  "category": "image",
+  "enabled": true
+}
+```
 
 ## Development Commands
 
@@ -35,35 +63,27 @@ python -m http.server 5500
 # Node.js alternatives
 npx http-server -p 5500
 npx serve -l 5500
+
+# VS Code Live Server extension also works
 ```
 
 Then access at `http://localhost:5500/`
 
 ### Deployment
 
-For GitHub Pages deployment:
-- Ensure `.nojekyll` file exists to prevent Jekyll processing
-- All assets are relative paths, no configuration needed
-
-## File Signature Format
-
-Signatures are defined in JSON with the following structure:
-- `pattern`: Hex bytes with support for wildcards (`??`) and ranges (`[00-1F]`)
-- `offset`: Absolute or relative positioning
-- `trailer`: Optional end-of-file pattern
-- `confidence`: 0-100 reliability score
+For GitHub Pages: all assets use relative paths, no build step required.
 
 ## Testing Approach
 
-No formal test framework is configured. Manual testing approach:
-1. Load various file types to verify signature detection
-2. Test import/export functionality with different dictionary formats
-3. Verify hex viewer highlighting and navigation
-4. Check browser compatibility (Chrome, Firefox, Safari, Edge)
+No formal test framework. Manual testing:
+1. Load various file types (JPEG, PNG, PDF, ZIP) to verify signature detection
+2. Test HexView virtual scrolling with large files (>100MB)
+3. Verify copy buttons (HEX/ASCII/RAW) work with selections
+4. Check import/export of signature dictionaries
 
-## Important Notes
+## Code Patterns
 
-- The main application logic (`js/app.js`) appears to be empty/placeholder
-- Worker implementation (`js/worker.js`) handles the actual file scanning logic
-- No external dependencies or package manager configuration
-- Designed for forensic education and CTF challenges, not production forensic work
+- Global state in `STATE` object (`app.js:6-16`)
+- DOM queries via `qs()` / `qsa()` helper functions
+- Toast notifications via `toast()` function (currently console.log only)
+- Loading overlay controlled by `showLoading()` / `hideLoading()`

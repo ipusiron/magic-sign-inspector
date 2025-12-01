@@ -1,3 +1,40 @@
+<!--
+---
+id: day040
+slug: magic-sign-inspector
+
+title: "MagicSign Inspector"
+
+subtitle_ja: "ファイルシグネチャ（マジックナンバー）可視化・検証ツール"
+subtitle_en: "File Signature (Magic Number) Visualization and Verification Tool"
+
+description_ja: "ファイルのマジックナンバー（シグネチャ）を可視化・編集・検証できる軽量フォレンジック補助ツール。244種類のシグネチャ対応、HEXビュー、ハッシュ計算、foremost.conf出力など。"
+description_en: "A lightweight forensic assistance tool for visualizing, editing, and verifying file magic numbers (signatures). Supports 244 signatures, HEX view, hash calculation, and foremost.conf export."
+
+category_ja:
+  - フォレンジック
+  - バイナリ解析
+category_en:
+  - Forensics
+  - Binary Analysis
+
+difficulty: 2
+
+tags:
+  - magic-number
+  - file-signature
+  - hex-viewer
+  - forensics
+  - file-carving
+  - ctf
+
+repo_url: "https://github.com/ipusiron/magic-sign-inspector"
+demo_url: "https://ipusiron.github.io/magic-sign-inspector/"
+
+hub: true
+---
+-->
+
 # MagicSign Inspector - ファイルシグネチャ（マジックナンバー）可視化・検証ツール
 
 ![GitHub Repo stars](https://img.shields.io/github/stars/ipusiron/magic-sign-inspector?style=social)
@@ -103,7 +140,7 @@ foremost -c custom_foremost.conf -i suspect_hdd.img -o recovered/
 
 ---
 
-## 📂 ディレクトリ構成
+## 📂 ディレクトリー構成
 
 ```
 magic-sign-inspector/
