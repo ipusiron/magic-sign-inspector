@@ -1,6 +1,7 @@
 import { HexView } from "./hexview.js";
 import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
 import { findAppendedData, formatSize, appendedFileName, identifyStart } from "./appended.js";
+import { checkExtension } from "./extcheck.js";
 
 // 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
 const t = (key, params) => window.I18n.t(key, params);
@@ -39,6 +40,7 @@ async function init(){
     renderSigTable();
     renderHits(STATE.hits);
     renderAppended();
+    renderExtensionCheck();
   });
 
   // Theme
@@ -714,6 +716,7 @@ async function openFile(file){
     STATE.hits = [];
     renderHits([]);
     renderAppended();
+    renderExtensionCheck();
     setProgress(100, t("toast.readDone"));
     
     // Progressive HEX view initialization based on file size
@@ -923,6 +926,7 @@ function onScanMessage(e){
     // Update file info with scan results
     updateFileInfoWithScanResults(STATE.hits);
     renderAppended();
+    renderExtensionCheck();
     
     // Show completion animation
     setProgress(100, t("toast.scanDone", { count: STATE.hits.length }));
@@ -1094,6 +1098,40 @@ function saveAppended(info){
   a.click();
   URL.revokeObjectURL(url);
   toast(t("appended.saved", { size: formatSize(info.length), name }));
+}
+
+/**
+ * 拡張子を変えただけのファイルは、見た目では見分けられない。
+ * 先頭のバイト列と名前がくい違っていたら、それを言う。
+ */
+/** 長い一覧は、先頭だけ出して残りは件数で言う */
+function shortList(items, keep = 3){
+  const sep = t("list.separator");
+  if (items.length <= keep) return items.join(sep);
+  return t("list.more", { items: items.slice(0, keep).join(sep), count: items.length - keep });
+}
+
+function renderExtensionCheck(){
+  const panel = qs("#extPanel");
+  if (!panel) return;
+  const info = checkExtension(STATE.file ? STATE.file.name : "", STATE.hits);
+  STATE.extMismatch = info;
+
+  if (!info) { panel.hidden = true; panel.replaceChildren(); return; }
+
+  const sep = t("list.separator");
+  const children = [
+    el("strong", { class: "appended-heading", text: t("ext.heading") }),
+    el("p", { text: t("ext.body", { ext: info.ext, names: shortList(info.names) }) }),
+    el("p", { class: "muted small", text: t("ext.expected", { extensions: shortList(info.extensions.map((e) => "." + e)) }) })
+  ];
+  if (info.executable) {
+    children.push(el("p", { class: "ext-danger", text: t("ext.executable") }));
+  }
+  children.push(el("p", { class: "muted small", text: t("ext.note") }));
+
+  panel.replaceChildren(...children);
+  panel.hidden = false;
 }
 
 function renderHits(hits){

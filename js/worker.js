@@ -104,6 +104,8 @@ function compileSig(sig) {
   return {
     id: sig.id,
     name: sig.name,
+    // 拡張子とのくい違いを見るのに使う
+    extensions: Array.isArray(sig.extensions) ? sig.extensions : [],
     confidence: sig.confidence ?? 80,
     parts,
     length: parts.length,
@@ -172,6 +174,7 @@ function matchAt(view, c, pos, base, hits, context) {
     name: c.name,
     offset: base + pos,
     length: c.length,
+    extensions: c.extensions,
     confidence: c.confidence || 80,
     notes: "",
     trailerOffset,
@@ -267,6 +270,7 @@ function finalizeScan(hits, context, invalid) {
     name: h.name,
     offset: h.offset,
     length: h.length,
+    extensions: Array.isArray(h.extensions) ? h.extensions : [],
     confidence: h.confidence,
     notes: h.notes,
     trailerOffset: typeof h.trailerOffset === "number" ? h.trailerOffset : null,

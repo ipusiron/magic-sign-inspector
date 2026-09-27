@@ -2467,3 +2467,10 @@ input[type="search"]{
   border-color: #b45309;
 }
 :root.dark .appended-heading{ color: #fbbf24; }
+
+/* 実行ファイルが別の拡張子で置かれているときの、強い注意 */
+.ext-danger{
+  color: var(--danger);
+  font-weight: 700;
+}
+:root.dark .ext-danger{ color: #f87171; }
