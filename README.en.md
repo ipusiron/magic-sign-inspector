@@ -34,6 +34,14 @@ Everything runs in your browser. No file you open is uploaded anywhere.
 >
 > *The same file with its end removed. The trailer is missing, and JPEG (Complete) no longer matches.*
 
+> ![A banner showing a ZIP appended behind a JPEG](assets/screenshot-appended-en.png)
+>
+> *An archive glued behind an image. That part alone can be saved out.*
+
+> ![Six files checked in one batch](assets/screenshot-batch-en.png)
+>
+> *Carving output, one row per file. It exports as CSV too.*
+
 ---
 
 ## 🎯 Who it is for
@@ -51,6 +59,11 @@ Everything runs in your browser. No file you open is uploaded anywhere.
 
 - **184 signatures included** (181 enabled by default): 29 image, 26 archive, 20 document, 17 audio, 14 video, 78 other
 - **Trailer checking** — 26 of them also carry the bytes expected at the end of the file, so you can tell a complete file from one that was cut short
+- **Data appended past the end** — finds an archive glued behind an image, and saves just that part
+- **Extension mismatch** — says so when a file named `.jpg` starts with the bytes of an executable
+- **Batch checking** — compare carving output row by row and export it as CSV
+- **Entropy profile** — the file split into parts, so the seam between text and encrypted data is visible
+- **Hex search** — by hex or by text, from the right-click menu or Ctrl+F
 - **Drag and drop** a file, or pick one with the button
 - **Scan range** — first 64MB, first 128MB, start + end, or the whole file
 - **Hex view** with virtual scrolling, so a large file still scrolls smoothly
@@ -123,11 +136,18 @@ No dependencies; the tests run on Node's own runner.
 npm test
 ```
 
+93 tests in all.
+
 | File | What it covers |
 |------|----------------|
 | `test/scan.test.js` | scanning, trailer checking, relative offsets, size limits, skipping unreadable patterns |
 | `test/dict.test.js` | validating an imported dictionary |
 | `test/foremost.test.js` | reading and writing `foremost.conf` |
+| `test/search.test.js` | the hex search: parsing a query, finding every match, wrapping around |
+| `test/appended.test.js` | data past the end of the file, and naming the extracted part |
+| `test/extcheck.test.js` | extension mismatch, and the cases where it must stay quiet |
+| `test/batch.test.js` | batch rows, and CSV cells that a spreadsheet would otherwise execute |
+| `test/entropy.test.js` | entropy per block, and the minimum block size |
 | `test/i18n.test.js` | the Japanese and English dictionaries hold the same keys, and every key the UI asks for exists |
 
 Contrast, tap target sizes, narrow screens and CSP violations are checked by hand with Playwright rather than in these tests.
@@ -144,11 +164,17 @@ magic-sign-inspector/
 ├── js/
 │   ├── app.js                  # the application
 │   ├── i18n.js                 # Japanese and English text
-│   ├── dict.js                 # dictionary validation, foremost.conf (no DOM)
+│   ├── dict.js                 # dictionary validation, foremost.conf
+│   ├── search.js               # hex search
+│   ├── appended.js             # data past the end of the file
+│   ├── extcheck.js             # extension mismatch
+│   ├── batch.js                # batch rows and CSV
+│   ├── entropy.js              # entropy per block
 │   ├── fileinfo.js             # file details, hashes, Exif link
 │   ├── hexview.js              # hex view with virtual scrolling
 │   ├── shortcuts.js            # keyboard
 │   └── worker.js               # the scan itself
+│   #  the five above fileinfo.js touch no DOM, so they are tested directly
 ├── sigs/                       # 184 signatures in four files
 │   ├── default.json            # 54
 │   ├── enhanced.json           # 67

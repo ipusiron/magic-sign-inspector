@@ -42,6 +42,7 @@
     <nav class="main-tabs" role="tablist" data-i18n-aria-label="tabs.aria" aria-label="機能タブ">
       <button class="main-tab active" id="maintab-signatures" data-tab="signatures" role="tab" aria-selected="true" aria-controls="tab-signatures" data-i18n="tab.signatures">📝 シグネチャ一覧</button>
       <button class="main-tab" id="maintab-inspect" data-tab="inspect" role="tab" aria-selected="false" aria-controls="tab-inspect" data-i18n="tab.inspect">🔍 検査</button>
+      <button class="main-tab" id="maintab-batch" data-tab="batch" role="tab" aria-selected="false" aria-controls="tab-batch" data-i18n="tab.batch">📦 一括</button>
       <button class="main-tab" id="maintab-edit" data-tab="edit" role="tab" aria-selected="false" aria-controls="tab-edit" data-i18n="tab.edit">✏️ 編集</button>
       <button class="main-tab" id="maintab-dictio" data-tab="dictio" role="tab" aria-selected="false" aria-controls="tab-dictio" data-i18n="tab.dictio">📁 辞書 I/O</button>
       <button class="main-tab" id="maintab-settings" data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings" data-i18n="tab.settings">⚙️ 設定/ヘルプ</button>
@@ -205,6 +206,13 @@
             </div>
           </div>
 
+          <div id="entropyPanel" class="entropy-panel" hidden>
+            <h3 data-i18n="entropy.heading">📈 エントロピーの分布</h3>
+            <p class="muted small" id="entropyDescription"></p>
+            <div id="entropyChart" class="entropy-chart"></div>
+            <p class="muted small" id="entropyNote"></p>
+          </div>
+
           <div class="inspect-controls">
             <label><span data-i18n="scan.rangeLabel">スキャン範囲</span>
               <select id="scanRange">
@@ -240,6 +248,8 @@
                   <!-- script.js で埋め込み -->
                 </tbody>
               </table>
+              <div id="extPanel" class="appended-panel" role="status" hidden></div>
+              <div id="appendedPanel" class="appended-panel" role="status" hidden></div>
               <p class="muted small" class="mt-8">
                 <span class="desktop-hint" data-i18n="hits.desktopHint">クリックで個別選択・HEXハイライト、再クリックで全体表示に戻る</span>
                 <span class="mobile-hint" data-i18n="hits.mobileHint">タップで選択・ハイライト、長押しで詳細表示</span>
@@ -269,6 +279,7 @@
                     <span class="text">RAW</span>
                   </button>
                 </div>
+                <button id="hexFindOpen" class="btn" type="button" data-i18n="hex.findButton" data-i18n-title="find.title" title="HEXビューを検索">🔍 検索</button>
                 <button id="jumpPrev" class="btn" data-i18n="hex.prev">← 前ヒット</button>
                 <button id="jumpNext" class="btn" data-i18n="hex.next">次ヒット →</button>
                 <label class="grow">
@@ -277,10 +288,61 @@
                 </label>
                 <button id="jumpGo" class="btn" data-i18n="hex.go">移動</button>
               </div>
+              <div id="hexFind" class="hex-find" role="search" data-i18n-aria-label="find.title" aria-label="HEXビューを検索" hidden>
+                <input id="hexFindInput" type="search" data-i18n-placeholder="find.placeholder" placeholder="例: FF D8 または JFIF" data-i18n-aria-label="find.title" aria-label="HEXビューを検索" />
+                <select id="hexFindMode" data-i18n-aria-label="find.title" aria-label="HEXビューを検索">
+                  <option value="hex" data-i18n="find.modeHex">16進</option>
+                  <option value="text" data-i18n="find.modeText">文字</option>
+                </select>
+                <button id="hexFindPrev" class="btn btn-sm" type="button" data-i18n-title="find.prev" data-i18n-aria-label="find.prev" title="前へ" aria-label="前へ">←</button>
+                <button id="hexFindNext" class="btn btn-sm" type="button" data-i18n-title="find.next" data-i18n-aria-label="find.next" title="次へ" aria-label="次へ">→</button>
+                <span id="hexFindCount" class="hex-find-count" aria-live="polite"></span>
+                <button id="hexFindClose" class="btn btn-sm" type="button" data-i18n-title="find.close" data-i18n-aria-label="find.close" title="検索を閉じる" aria-label="検索を閉じる">✕</button>
+              </div>
               <div id="hexView" class="hexview" role="region" data-i18n-aria-label="hex.viewAria" aria-label="HEXビュー" tabindex="0">
                 <!-- js/hexview.js が描画 -->
               </div>
             </div>
+          </div>
+        </section>
+
+        <!-- ---------- Batch Panel ---------- -->
+        <section id="tab-batch" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="maintab-batch">
+          <h3 data-i18n="batch.heading">複数のファイルをまとめて確かめる</h3>
+          <p class="tab-description" data-i18n="batch.description">
+            カービングで取り出したファイルのように、数が多いものを1つずつ開かずに見比べます。すべてブラウザーの中で処理し、どこへも送りません。
+          </p>
+
+          <div class="drop-area batch-drop" id="batchDrop" tabindex="0" data-i18n-aria-label="batch.dropAria" aria-label="複数のファイルをドロップして確かめる">
+            <div class="drop-content">
+              <p class="drop-title" data-i18n="batch.dropTitle">ファイルをまとめてドロップ</p>
+              <p class="drop-or" data-i18n="inspect.or">または</p>
+              <button id="batchOpenBtn" class="btn primary" type="button" data-i18n="batch.openFiles">ファイルを選ぶ（複数可）</button>
+              <input id="batchInput" type="file" multiple hidden />
+            </div>
+          </div>
+
+          <div class="batch-controls">
+            <span id="batchStatus" class="batch-status" aria-live="polite" data-i18n="batch.empty">まだ何も読み込んでいません。</span>
+            <button id="batchExportBtn" class="btn" type="button" data-i18n="batch.exportCsv" disabled>CSVで書き出す</button>
+            <button id="batchClearBtn" class="btn" type="button" data-i18n="batch.clear" disabled>消す</button>
+          </div>
+
+          <div class="batch-table-wrap">
+            <table class="batch-table">
+              <thead>
+                <tr>
+                  <th data-i18n="batch.th.name">ファイル名</th>
+                  <th data-i18n="batch.th.size">大きさ</th>
+                  <th data-i18n="batch.th.format">推定形式</th>
+                  <th data-i18n="batch.th.trailer">終端</th>
+                  <th data-i18n="batch.th.mismatch">拡張子</th>
+                  <th data-i18n="batch.th.appended">後ろの余分</th>
+                  <th data-i18n="batch.th.sha256">SHA-256</th>
+                </tr>
+              </thead>
+              <tbody id="batchTbody"></tbody>
+            </table>
           </div>
         </section>
 

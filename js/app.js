@@ -1,5 +1,9 @@
 import { HexView } from "./hexview.js";
 import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
+import { findAppendedData, formatSize, appendedFileName, identifyStart } from "./appended.js";
+import { checkExtension } from "./extcheck.js";
+import { summarizeFile, toCsv } from "./batch.js";
+import { blockEntropies, entropyOf, entropyBand, findJumps } from "./entropy.js";
 
 // 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
 const t = (key, params) => window.I18n.t(key, params);
@@ -22,6 +26,7 @@ let STATE = {
   hex: null,
   hits: [],
   selectedHitIndex: null, // -1 = no selection (show all), null = no hits, >=0 = specific hit
+  batch: [], // 一括チェックの結果
   theme: (localStorage.getItem("msi_theme") || "auto")
 };
 
@@ -37,6 +42,10 @@ async function init(){
   document.addEventListener("languagechange", () => {
     renderSigTable();
     renderHits(STATE.hits);
+    renderAppended();
+    renderExtensionCheck();
+    renderBatch();
+    renderEntropyChart();
   });
 
   // Theme
@@ -54,6 +63,7 @@ async function init(){
 
   // Tabs
   qsa(".main-tab").forEach(btn=>btn.addEventListener("click", onTab));
+  setupBatch();
   setupTabKeyboard();
 
   // File open
@@ -336,6 +346,288 @@ function setupTabKeyboard(){
   document.addEventListener("msi:tabchanged", updateTabIndex);
 }
 
+
+/* ------------ エントロピーの分布 ------------ */
+
+// 分ける数。多すぎると1区間が細かくなりすぎ、値が跳ねて読めない
+const ENTROPY_BLOCKS = 128;
+// これより小さいファイルは、分けても意味がない
+const ENTROPY_MIN_SIZE = 2048;
+
+/** SVGの要素を作る。属性は文字列で渡す */
+function svgEl(tag, attrs = {}, children = []){
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  for (const c of children) node.appendChild(c);
+  return node;
+}
+
+/**
+ * 全体で1つの値しか出さないと、「前半はテキスト、後半は暗号化」のような
+ * 切れ目が平均に埋もれる。分けて描くと、その境目が目で分かる。
+ */
+function renderEntropyChart(){
+  const panel = qs("#entropyPanel");
+  if (!panel) return;
+  if (!STATE.buffer) { panel.hidden = true; return; }
+
+  const view = new Uint8Array(STATE.buffer);
+  const description = qs("#entropyDescription");
+  const note = qs("#entropyNote");
+  const chart = qs("#entropyChart");
+
+  if (view.length < ENTROPY_MIN_SIZE) {
+    panel.hidden = false;
+    chart.replaceChildren();
+    description.textContent = t("entropy.tooSmall");
+    note.textContent = t("entropy.overall", { value: entropyOf(view).toFixed(3) });
+    return;
+  }
+
+  const blocks = blockEntropies(view, ENTROPY_BLOCKS);
+  STATE.entropyBlocks = blocks;
+
+  const width = 1000;
+  const height = 190;
+  const padLeft = 28;
+  const padBottom = 16;
+  // 目盛りの「8」が上端で切れないよう、上にも余白を取る
+  const padTop = 10;
+  const plotW = width - padLeft;
+  const plotH = height - padBottom - padTop;
+  const barW = plotW / blocks.length;
+
+  const children = [];
+  // 目盛り（0・2・4・6・8 bits/byte）
+  for (const level of [0, 2, 4, 6, 8]) {
+    const y = padTop + plotH - (level / 8) * plotH;
+    children.push(svgEl("line", { class: "entropy-grid", x1: padLeft, y1: y, x2: width, y2: y }));
+    children.push(svgEl("text", { class: "entropy-axis", x: 0, y: y + 3 }, [document.createTextNode(String(level))]));
+  }
+
+  blocks.forEach((block, i) => {
+    const h = Math.max(1, (block.value / 8) * plotH);
+    const band = entropyBand(block.value);
+    const bar = svgEl("rect", {
+      class: `entropy-block band-${band}`,
+      x: padLeft + i * barW,
+      y: padTop + plotH - h,
+      width: Math.max(1, barW - 0.5),
+      height: h
+    });
+    const label = t("entropy.blockLabel", {
+      offset: block.start.toString(16).toUpperCase().padStart(8, "0"),
+      size: formatSize(block.end - block.start),
+      value: block.value.toFixed(2),
+      band: t(`entropy.band.${band}`)
+    });
+    bar.appendChild(svgEl("title", {}, [document.createTextNode(label)]));
+    bar.addEventListener("click", () => STATE.hex.scrollToOffset(block.start));
+    children.push(bar);
+  });
+
+  const svg = svgEl("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-label": t("entropy.heading")
+  }, children);
+
+  chart.replaceChildren(svg, buildEntropyLegend());
+  description.textContent = t("entropy.description", { blocks: blocks.length });
+
+  const jumps = findJumps(blocks);
+  const overall = t("entropy.overall", { value: entropyOf(view).toFixed(3) });
+  if (jumps.length) {
+    const where = jumps.slice(0, 3).map((j) => t("entropy.jumpAt", {
+      offset: j.at.toString(16).toUpperCase().padStart(8, "0"),
+      from: j.from.toFixed(1),
+      to: j.to.toFixed(1)
+    })).join(t("list.separator"));
+    note.textContent = `${overall} ${t("entropy.jump", { count: jumps.length })} ${where}`;
+  } else {
+    note.textContent = overall;
+  }
+  panel.hidden = false;
+}
+
+function buildEntropyLegend(){
+  const legend = el("div", { class: "entropy-legend" });
+  for (const band of ["flat", "low", "text", "mixed", "high"]) {
+    const item = el("span", {}, [
+      el("span", { class: `swatch band-${band}` }),
+      document.createTextNode(t(`entropy.band.${band}`))
+    ]);
+    legend.appendChild(item);
+  }
+  return legend;
+}
+
+/* ------------ 一括チェック ------------ */
+
+// 一度に扱う上限。carving の出力は数千件になることがあるが、
+// 画面に全部並べても読めないうえ、走査の時間もかかる
+const BATCH_LIMIT = 200;
+// 1件あたり、この大きさまでを読む。終端を見たいので先頭と末尾を取る
+const BATCH_HEAD = 4 * 1024 * 1024;
+
+function setupBatch(){
+  const input = qs("#batchInput");
+  const drop = qs("#batchDrop");
+  if (!input || !drop) return;
+
+  qs("#batchOpenBtn").addEventListener("click", () => input.click());
+  input.addEventListener("change", (e) => runBatch([...e.target.files]));
+  ;["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+  ;["dragleave","drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    runBatch([...(e.dataTransfer?.files || [])]);
+  });
+  qs("#batchExportBtn").addEventListener("click", exportBatchCsv);
+  qs("#batchClearBtn").addEventListener("click", () => {
+    STATE.batch = [];
+    renderBatch();
+  });
+}
+
+/** 1ファイルを走査する。worker は使い捨てにして、途中で止まっても後を引かせない */
+function scanOneFile(segments, fileSize, entries){
+  return new Promise((resolve) => {
+    const worker = new Worker("js/worker.js");
+    const done = (value) => { worker.terminate(); resolve(value); };
+    worker.onmessage = (e) => {
+      if (e.data.type === "done") done({ hits: e.data.hits || [], trailerChecked: e.data.trailerChecked !== false });
+      if (e.data.type === "error") done({ hits: [], trailerChecked: false });
+    };
+    worker.onerror = () => done({ hits: [], trailerChecked: false });
+    worker.postMessage({ cmd: "scan", fileSize, segments, signatures: entries });
+  });
+}
+
+/** 大きなファイルでも、先頭と末尾だけを読む。終端の照合に末尾が要る */
+async function readBatchSegments(file){
+  if (file.size <= BATCH_HEAD * 2) {
+    return [{ buffer: await file.arrayBuffer(), base: 0 }];
+  }
+  const head = await file.slice(0, BATCH_HEAD).arrayBuffer();
+  const tailStart = file.size - BATCH_HEAD;
+  const tail = await file.slice(tailStart).arrayBuffer();
+  return [{ buffer: head, base: 0 }, { buffer: tail, base: tailStart }];
+}
+
+async function sha256Of(file){
+  if (!crypto?.subtle) return "";
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch (err) {
+    debugLog("sha256 failed", err);
+    return "";
+  }
+}
+
+/** 後ろに付いた部分の先頭だけを読んで、それが何かを見る */
+async function identifyAppendedInBatch(file, hits, trailerChecked){
+  const info = findAppendedData(hits, file.size, trailerChecked);
+  if (!info) return [];
+  const head = await file.slice(info.start, Math.min(info.start + 64, file.size)).arrayBuffer();
+  return identifyStart(new Uint8Array(head), STATE.dict.entries).map((g) => g.name);
+}
+
+async function runBatch(files){
+  if (!files.length) return;
+  const entries = STATE.dict.entries.filter((e) => e.enabled !== false && e.pattern && e.offset);
+  const targets = files.slice(0, BATCH_LIMIT);
+  if (files.length > BATCH_LIMIT) toast(t("batch.limit", { limit: BATCH_LIMIT }));
+
+  STATE.batch = [];
+  renderBatch();
+  const status = qs("#batchStatus");
+
+  for (let i = 0; i < targets.length; i += 1) {
+    const file = targets[i];
+    status.textContent = t("batch.running", { done: i, total: targets.length });
+    try {
+      const segments = await readBatchSegments(file);
+      const { hits, trailerChecked } = await scanOneFile(segments, file.size, entries);
+      const sha256 = file.size <= 64 * 1024 * 1024 ? await sha256Of(file) : "";
+      const appendedNames = await identifyAppendedInBatch(file, hits, trailerChecked);
+      STATE.batch.push(summarizeFile({ name: file.name, size: file.size, hits, trailerChecked, sha256, appendedNames }));
+    } catch (err) {
+      debugLog("batch read failed", err);
+      toast(t("batch.readError", { name: file.name }));
+    }
+    // 1件ごとに出す。全部終わるまで真っ白、を避ける
+    renderBatch(targets.length, i + 1);
+  }
+  renderBatch();
+}
+
+function batchTrailerCell(row){
+  const map = {
+    found: ["batch.trailer.found", "batch-flag-ok"],
+    missing: ["batch.trailer.missing", "batch-flag-ng"],
+    unchecked: ["batch.trailer.unchecked", "batch-flag-warn"],
+    none: ["batch.trailer.none", "muted"]
+  };
+  const [key, cls] = map[row.trailer] || map.none;
+  return el("td", {}, [el("span", { class: cls, text: t(key) })]);
+}
+
+function renderBatch(total, done){
+  const tbody = qs("#batchTbody");
+  const status = qs("#batchStatus");
+  if (!tbody) return;
+
+  const rows = STATE.batch || [];
+  tbody.replaceChildren(...rows.map((row) => {
+    const cells = [
+      el("td", { text: row.name }),
+      el("td", { class: "num", text: row.sizeText }),
+      el("td", {}, [el("span", row.formatText ? { text: row.formatText } : { class: "muted", text: t("batch.format.none") })]),
+      batchTrailerCell(row),
+      el("td", {}, [row.mismatch
+        ? el("span", { class: row.executable ? "batch-flag-ng" : "batch-flag-warn",
+                       text: t("batch.mismatch.ng", { extensions: row.mismatch.slice(0, 3).map((e) => "." + e).join(t("list.separator")) }) })
+        : el("span", { class: "batch-flag-ok", text: t("batch.mismatch.ok") })]),
+      el("td", { class: "num" }, [row.appendedBytes
+        ? el("span", { class: row.appendedNames.length ? "batch-flag-warn" : "muted", text: formatSize(row.appendedBytes) })
+        : el("span", { class: "muted", text: t("batch.appended.none") })]),
+      el("td", { class: "mono", text: row.sha256 })
+    ];
+    return el("tr", {}, cells);
+  }));
+
+  qs("#batchExportBtn").disabled = rows.length === 0;
+  qs("#batchClearBtn").disabled = rows.length === 0;
+  if (typeof total === "number") status.textContent = t("batch.running", { done, total });
+  else status.textContent = rows.length ? t("batch.done", { total: rows.length }) : t("batch.empty");
+}
+
+const BATCH_CSV_HEADERS = () => [
+  { label: t("batch.th.name"), value: (r) => r.name },
+  { label: t("batch.th.size"), value: (r) => r.size },
+  { label: t("batch.th.format"), value: (r) => r.formats.join("|") },
+  { label: t("batch.th.trailer"), value: (r) => r.trailer },
+  { label: t("batch.th.mismatch"), value: (r) => (r.mismatch ? r.mismatch.join("|") : "") },
+  { label: t("batch.th.appended"), value: (r) => r.appendedBytes },
+  { label: t("batch.th.sha256"), value: (r) => r.sha256 }
+];
+
+function exportBatchCsv(){
+  const rows = STATE.batch || [];
+  if (!rows.length) return;
+  // Excel が UTF-8 と分かるように BOM を付ける
+  const csv = "\ufeff" + toCsv(rows, BATCH_CSV_HEADERS());
+  const name = "magic-sign-inspector-batch.csv";
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(t("batch.exported", { total: rows.length, name }));
+}
 
 function onTab(e){
   qsa(".main-tab").forEach(b=>{
@@ -711,6 +1003,9 @@ async function openFile(file){
     // Clear previous state first
     STATE.hits = [];
     renderHits([]);
+    renderAppended();
+    renderExtensionCheck();
+    renderEntropyChart();
     setProgress(100, t("toast.readDone"));
     
     // Progressive HEX view initialization based on file size
@@ -919,6 +1214,8 @@ function onScanMessage(e){
     
     // Update file info with scan results
     updateFileInfoWithScanResults(STATE.hits);
+    renderAppended();
+    renderExtensionCheck();
     
     // Show completion animation
     setProgress(100, t("toast.scanDone", { count: STATE.hits.length }));
@@ -1037,6 +1334,98 @@ function reportSkipped(skipped, trailerChecked){
     messages.push(t("toast.skipInvalid", { count: invalid.length, name: invalid[0].name }));
   }
   for (const message of messages) toast(message);
+}
+
+/**
+ * ファイルの終端より後ろに何か付いていれば、それを伝える。
+ * 画像の後ろに書庫を繋ぐ隠し方は、開いても見た目に出ない。
+ */
+function renderAppended(){
+  const panel = qs("#appendedPanel");
+  if (!panel) return;
+  const info = findAppendedData(STATE.hits, STATE.buffer ? STATE.buffer.byteLength : 0, STATE.trailerChecked);
+  STATE.appended = info;
+
+  if (!info) { panel.hidden = true; panel.replaceChildren(); return; }
+
+  // 走査で見つかったものに加えて、後ろの部分を1つのファイルとみなして先頭も照合する。
+  // 既定の辞書はほとんどが「ファイル先頭から0バイト目」の指定なので、
+  // これをやらないと、繋がれた側が何なのかを言えない
+  const head = new Uint8Array(STATE.buffer, info.start, Math.min(info.length, 64));
+  const guessed = identifyStart(head, STATE.dict.entries).map((g) => g.name);
+  const names = [...new Set([...guessed, ...info.inside.map((h) => h.name)].filter(Boolean))].slice(0, 5);
+  // 何も見つからないうちから⚠️を出すと、形式の終端構造の一部まで
+  // 「隠されている」ように読めてしまう（ZIPの終端記録で実際に起きた）
+  const suspicious = names.length > 0;
+  panel.classList.toggle("quiet", !suspicious);
+  const children = [
+    el("strong", { class: "appended-heading",
+                   text: t(suspicious ? "appended.heading" : "appended.headingQuiet") }),
+    el("p", { text: t("appended.body", {
+      name: info.base.name || "-",
+      end: info.start.toString(16).toUpperCase().padStart(8, "0"),
+      size: formatSize(info.length)
+    }) }),
+    el("p", { class: "muted small", text: suspicious ? t("appended.inside", { names: names.join(t("list.separator")) }) : t("appended.nothing") }),
+    el("p", { class: "muted small", text: suspicious ? t("appended.hint") : t("appended.structural") })
+  ];
+
+  const jump = el("button", { class: "btn btn-sm", type: "button", text: t("appended.jump") });
+  jump.addEventListener("click", () => STATE.hex.scrollToOffset(info.start));
+  const save = el("button", { class: "btn btn-sm primary", type: "button", text: t("appended.save") });
+  save.addEventListener("click", () => saveAppended(info));
+  children.push(el("div", { class: "appended-actions" }, [jump, save]));
+
+  panel.replaceChildren(...children);
+  panel.hidden = false;
+}
+
+/** 後ろに付いた部分だけを切り出して保存する */
+function saveAppended(info){
+  if (!STATE.buffer) return;
+  const part = STATE.buffer.slice(info.start, info.start + info.length);
+  const name = appendedFileName(STATE.file ? STATE.file.name : "file", info.start);
+  const url = URL.createObjectURL(new Blob([part], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(t("appended.saved", { size: formatSize(info.length), name }));
+}
+
+/**
+ * 拡張子を変えただけのファイルは、見た目では見分けられない。
+ * 先頭のバイト列と名前がくい違っていたら、それを言う。
+ */
+/** 長い一覧は、先頭だけ出して残りは件数で言う */
+function shortList(items, keep = 3){
+  const sep = t("list.separator");
+  if (items.length <= keep) return items.join(sep);
+  return t("list.more", { items: items.slice(0, keep).join(sep), count: items.length - keep });
+}
+
+function renderExtensionCheck(){
+  const panel = qs("#extPanel");
+  if (!panel) return;
+  const info = checkExtension(STATE.file ? STATE.file.name : "", STATE.hits);
+  STATE.extMismatch = info;
+
+  if (!info) { panel.hidden = true; panel.replaceChildren(); return; }
+
+  const sep = t("list.separator");
+  const children = [
+    el("strong", { class: "appended-heading", text: t("ext.heading") }),
+    el("p", { text: t("ext.body", { ext: info.ext, names: shortList(info.names) }) }),
+    el("p", { class: "muted small", text: t("ext.expected", { extensions: shortList(info.extensions.map((e) => "." + e)) }) })
+  ];
+  if (info.executable) {
+    children.push(el("p", { class: "ext-danger", text: t("ext.executable") }));
+  }
+  children.push(el("p", { class: "muted small", text: t("ext.note") }));
+
+  panel.replaceChildren(...children);
+  panel.hidden = false;
 }
 
 function renderHits(hits){

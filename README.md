@@ -8,8 +8,8 @@ title: "MagicSign Inspector"
 subtitle_ja: "ファイルシグネチャ（マジックナンバー）可視化・検証ツール"
 subtitle_en: "File Signature (Magic Number) Visualization and Verification Tool"
 
-description_ja: "ファイルのマジックナンバー（シグネチャ）を可視化・編集・検証できる軽量フォレンジック補助ツール。184件のシグネチャを収録し、HEXビュー、ハッシュ計算、終端の照合、foremost.conf出力に対応。日英表示。"
-description_en: "A lightweight forensic assistance tool for viewing, editing and testing file magic numbers (signatures). Ships 184 signatures, with a hex view, hashes, trailer checking and foremost.conf export. Japanese and English."
+description_ja: "ファイルのマジックナンバー（シグネチャ）を可視化・編集・検証できる軽量フォレンジック補助ツール。184件のシグネチャ、終端の照合、拡張子とのくい違いの指摘、終端の後ろに付いたデータの切り出し、複数ファイルの一括チェック、エントロピーの分布、HEXビューの検索。日英表示。"
+description_en: "A lightweight forensic assistance tool for viewing, editing and testing file magic numbers (signatures). 184 signatures, trailer checking, extension mismatch warnings, extraction of data appended past the end, batch checking, an entropy profile and hex search. Japanese and English."
 
 category_ja:
   - フォレンジック
@@ -69,6 +69,18 @@ hub: true
 > ![途中で切れたJPEG。終端が見つからない](assets/screenshot-truncated.png)
 >
 > *同じファイルの末尾を落としたもの。終端が「見つからない」になり、JPEG (Complete) も消える*
+
+> ![JPEGの後ろにZIPが繋がれていることを示す帯](assets/screenshot-appended.png)
+>
+> *画像の後ろに書庫を繋いだファイル。その部分だけを切り出して保存できる*
+
+> ![6ファイルを一括で確かめた表](assets/screenshot-batch.png)
+>
+> *カービングの出力を1行ずつ見比べる。CSVでも書き出せる*
+
+> ![エントロピーの分布とHEXビューの検索](assets/screenshot-entropy.png)
+>
+> *テキスト・ゼロ埋め・ランダムの境目が、区間ごとの色で分かる*
 
 ---
 
@@ -136,10 +148,11 @@ hub: true
 foremost -c custom_foremost.conf -i suspect_hdd.img -o recovered/
 ```
 
-4. **結果検証**: 抽出されたファイルを1つずつ本ツールに読ませて確かめる
-   - 一括で確かめる機能は、現時点ではない。
-   - 先頭のシグネチャだけでなく、終端（トレーラー）の列も見る。JPEGなら `FF D9` が無いものは途中で切れている
-   - シグネチャはヒットするがファイルとして不完全なものを、この差で見分けられる
+4. **結果検証**: 抽出されたファイルを「一括」タブにまとめて放り込む
+   - 1行につき1ファイルで、推定形式・終端の有無・拡張子とのくい違い・後ろに付いたデータ・SHA-256が並ぶ
+   - JPEGなら `FF D9` が無いものは途中で切れている。終端の列でそれが分かる
+   - 名前が `.jpg` でも中身が別形式なら、拡張子の列に出る
+   - CSVで書き出して、他の記録と突き合わせられる
 
 **成果**: どのファイルが完全でどれが途中で切れているかを、抽出結果の一覧に対して同じ手順で確かめられる
 
@@ -164,20 +177,31 @@ magic-sign-inspector/
 ├── js/                         # JavaScriptモジュール
 │   ├── app.js                  # メインアプリケーション
 │   ├── i18n.js                 # 日本語・英語の文言（UI側は文字列を持たない）
-│   ├── dict.js                 # 辞書の検証・foremost.conf の読み書き（DOMに触れない）
+│   ├── dict.js                 # 辞書の検証・foremost.conf の読み書き
+│   ├── search.js               # HEXビューの検索
+│   ├── appended.js             # 終端の後ろに付いたデータの判定
+│   ├── extcheck.js             # 拡張子と中身のくい違いの判定
+│   ├── batch.js                # 一括チェックの組み立てとCSV
+│   ├── entropy.js              # 区間ごとのエントロピー
 │   ├── fileinfo.js             # ファイル情報・ハッシュ・Exif連携
 │   ├── hexview.js              # HEXビューア（仮想スクロール対応）
 │   ├── shortcuts.js            # キーボード操作
 │   └── worker.js               # WebWorker（走査の本体）
+│   #  ↑ dict.js 以下の5つはDOMに触れないので、そのままテストできる
 ├── sigs/                       # シグネチャ辞書（合計184件）
 │   ├── default.json            # 基本マジックナンバー（54件）
 │   ├── enhanced.json           # 拡張画像・アーカイブ形式（67件）
 │   ├── forensics.json          # フォレンジック特化形式（40件）
 │   └── trailers.json           # 終端シグネチャ（23件）
-└── test/                       # node --test で動く（依存パッケージなし）
+└── test/                       # node --test で動く（依存パッケージなし・93件）
     ├── scan.test.js            # 走査・終端の照合・相対オフセット
     ├── dict.test.js            # 辞書の検証
     ├── foremost.test.js        # foremost.conf の読み書き
+    ├── search.test.js          # HEXビューの検索
+    ├── appended.test.js        # 終端の後ろに付いたデータ
+    ├── extcheck.test.js        # 拡張子とのくい違い
+    ├── batch.test.js           # 一括チェックとCSV
+    ├── entropy.test.js         # 区間ごとのエントロピー
     └── i18n.test.js            # 辞書の欠けを拾う
 ```
 
@@ -190,6 +214,11 @@ magic-sign-inspector/
 #### ファイル解析機能
 - **184件のシグネチャを収録** - JPEG/PNG/ZIP/PDF/EXE等（既定で有効なのは181件。画像29・アーカイブ26・文書20・音声17・動画14・その他78）
 - **終端（トレーラー）の照合** - 26件は終端の並びも持ち、「先頭はあるのに終端が無い」壊れたファイルを見分けられる
+- **終端の後ろに付いたデータの指摘と切り出し** - 画像の後ろに書庫を繋ぐ隠し方を見つけ、その部分だけを保存できる
+- **拡張子と中身のくい違いの指摘** - `.jpg` なのに中身が実行ファイル、といった偽装を指摘する
+- **複数ファイルの一括チェック** - カービングの出力を1つずつ開かずに見比べ、CSVで書き出せる
+- **エントロピーの分布** - ファイルを区間に分けて描く。テキストと暗号化領域の境目が目で分かる
+- **HEXビューの検索** - 16進でも文字でも探せる。右クリックのメニューとCtrl+Fから
 - **ドラッグ&ドロップ解析** - 直感的なファイル読み込み
 - **大容量ファイル対応** - 50MB+でもスムーズな処理（チャンク読み込み）
 - **リアルタイムHEXビュー** - 仮想スクロールによる高速表示
@@ -211,7 +240,7 @@ magic-sign-inspector/
 #### ユーザビリティ
 - **ダークモード** - 目に優しい表示切り替え
 - **レスポンシブUI** - PC・タブレット・スマートフォン対応
-- **キーボードショートカット** - HEXビューでのCtrl+C/A等
+- **キーボードショートカット** - HEXビューでのCtrl+C/A/F等。タブは左右キーで移動できる
 - **プライバシー重視** - 完全ローカル処理、外部送信なし
 - **日本語・英語の切り替え** - ヘッダーのボタン、`?lang=en`、ブラウザーの言語設定のいずれでも切り替わる
 
