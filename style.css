@@ -2529,3 +2529,54 @@ input[type="search"]{
 .appended-panel.quiet .appended-heading{
   color: var(--fg);
 }
+
+/* エントロピーの分布 */
+.entropy-panel{
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.entropy-panel[hidden]{ display: none; }
+.entropy-panel h3{ margin: 0 0 6px; }
+.entropy-chart{
+  margin: 10px 0;
+  width: 100%;
+  overflow-x: auto;
+}
+.entropy-chart svg{ display: block; width: 100%; height: auto; }
+/* 分布のグラフの棒。fileinfo.js が作る全体のバー（.entropy-bar）とは別物なので
+   名前を分けている。同じ名前にしていて、数え間違いの元になった */
+.entropy-block{ cursor: pointer; }
+.entropy-block:hover{ opacity: .75; }
+.entropy-block.band-flat{ fill: #94a3b8; }
+.entropy-block.band-low{ fill: #38bdf8; }
+.entropy-block.band-text{ fill: #22c55e; }
+.entropy-block.band-mixed{ fill: #f59e0b; }
+.entropy-block.band-high{ fill: #ef4444; }
+.entropy-axis{ fill: var(--muted); font-size: 10px; }
+.entropy-grid{ stroke: var(--border); stroke-width: 1; }
+.entropy-legend{
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.entropy-legend span.swatch{
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+/* 凡例の色見本。棒と同じ色を使う */
+.entropy-legend .swatch.band-flat{ background: #94a3b8; }
+.entropy-legend .swatch.band-low{ background: #38bdf8; }
+.entropy-legend .swatch.band-text{ background: #22c55e; }
+.entropy-legend .swatch.band-mixed{ background: #f59e0b; }
+.entropy-legend .swatch.band-high{ background: #ef4444; }

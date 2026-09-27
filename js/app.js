@@ -3,6 +3,7 @@ import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
 import { findAppendedData, formatSize, appendedFileName, identifyStart } from "./appended.js";
 import { checkExtension } from "./extcheck.js";
 import { summarizeFile, toCsv } from "./batch.js";
+import { blockEntropies, entropyOf, entropyBand, findJumps } from "./entropy.js";
 
 // 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
 const t = (key, params) => window.I18n.t(key, params);
@@ -44,6 +45,7 @@ async function init(){
     renderAppended();
     renderExtensionCheck();
     renderBatch();
+    renderEntropyChart();
   });
 
   // Theme
@@ -344,6 +346,119 @@ function setupTabKeyboard(){
   document.addEventListener("msi:tabchanged", updateTabIndex);
 }
 
+
+/* ------------ エントロピーの分布 ------------ */
+
+// 分ける数。多すぎると1区間が細かくなりすぎ、値が跳ねて読めない
+const ENTROPY_BLOCKS = 128;
+// これより小さいファイルは、分けても意味がない
+const ENTROPY_MIN_SIZE = 2048;
+
+/** SVGの要素を作る。属性は文字列で渡す */
+function svgEl(tag, attrs = {}, children = []){
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  for (const c of children) node.appendChild(c);
+  return node;
+}
+
+/**
+ * 全体で1つの値しか出さないと、「前半はテキスト、後半は暗号化」のような
+ * 切れ目が平均に埋もれる。分けて描くと、その境目が目で分かる。
+ */
+function renderEntropyChart(){
+  const panel = qs("#entropyPanel");
+  if (!panel) return;
+  if (!STATE.buffer) { panel.hidden = true; return; }
+
+  const view = new Uint8Array(STATE.buffer);
+  const description = qs("#entropyDescription");
+  const note = qs("#entropyNote");
+  const chart = qs("#entropyChart");
+
+  if (view.length < ENTROPY_MIN_SIZE) {
+    panel.hidden = false;
+    chart.replaceChildren();
+    description.textContent = t("entropy.tooSmall");
+    note.textContent = t("entropy.overall", { value: entropyOf(view).toFixed(3) });
+    return;
+  }
+
+  const blocks = blockEntropies(view, ENTROPY_BLOCKS);
+  STATE.entropyBlocks = blocks;
+
+  const width = 1000;
+  const height = 180;
+  const padLeft = 28;
+  const padBottom = 16;
+  const plotW = width - padLeft;
+  const plotH = height - padBottom;
+  const barW = plotW / blocks.length;
+
+  const children = [];
+  // 目盛り（0・2・4・6・8 bits/byte）
+  for (const level of [0, 2, 4, 6, 8]) {
+    const y = plotH - (level / 8) * plotH;
+    children.push(svgEl("line", { class: "entropy-grid", x1: padLeft, y1: y, x2: width, y2: y }));
+    children.push(svgEl("text", { class: "entropy-axis", x: 0, y: y + 3 }, [document.createTextNode(String(level))]));
+  }
+
+  blocks.forEach((block, i) => {
+    const h = Math.max(1, (block.value / 8) * plotH);
+    const band = entropyBand(block.value);
+    const bar = svgEl("rect", {
+      class: `entropy-block band-${band}`,
+      x: padLeft + i * barW,
+      y: plotH - h,
+      width: Math.max(1, barW - 0.5),
+      height: h
+    });
+    const label = t("entropy.blockLabel", {
+      offset: block.start.toString(16).toUpperCase().padStart(8, "0"),
+      size: formatSize(block.end - block.start),
+      value: block.value.toFixed(2),
+      band: t(`entropy.band.${band}`)
+    });
+    bar.appendChild(svgEl("title", {}, [document.createTextNode(label)]));
+    bar.addEventListener("click", () => STATE.hex.scrollToOffset(block.start));
+    children.push(bar);
+  });
+
+  const svg = svgEl("svg", {
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-label": t("entropy.heading")
+  }, children);
+
+  chart.replaceChildren(svg, buildEntropyLegend());
+  description.textContent = t("entropy.description", { blocks: blocks.length });
+
+  const jumps = findJumps(blocks);
+  const overall = t("entropy.overall", { value: entropyOf(view).toFixed(3) });
+  if (jumps.length) {
+    const where = jumps.slice(0, 3).map((j) => t("entropy.jumpAt", {
+      offset: j.at.toString(16).toUpperCase().padStart(8, "0"),
+      from: j.from.toFixed(1),
+      to: j.to.toFixed(1)
+    })).join(t("list.separator"));
+    note.textContent = `${overall} ${t("entropy.jump", { count: jumps.length })} ${where}`;
+  } else {
+    note.textContent = overall;
+  }
+  panel.hidden = false;
+}
+
+function buildEntropyLegend(){
+  const legend = el("div", { class: "entropy-legend" });
+  for (const band of ["flat", "low", "text", "mixed", "high"]) {
+    const item = el("span", {}, [
+      el("span", { class: `swatch band-${band}` }),
+      document.createTextNode(t(`entropy.band.${band}`))
+    ]);
+    legend.appendChild(item);
+  }
+  return legend;
+}
 
 /* ------------ 一括チェック ------------ */
 
@@ -888,6 +1003,7 @@ async function openFile(file){
     renderHits([]);
     renderAppended();
     renderExtensionCheck();
+    renderEntropyChart();
     setProgress(100, t("toast.readDone"));
     
     // Progressive HEX view initialization based on file size
