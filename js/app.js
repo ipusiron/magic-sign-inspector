@@ -388,17 +388,19 @@ function renderEntropyChart(){
   STATE.entropyBlocks = blocks;
 
   const width = 1000;
-  const height = 180;
+  const height = 190;
   const padLeft = 28;
   const padBottom = 16;
+  // 目盛りの「8」が上端で切れないよう、上にも余白を取る
+  const padTop = 10;
   const plotW = width - padLeft;
-  const plotH = height - padBottom;
+  const plotH = height - padBottom - padTop;
   const barW = plotW / blocks.length;
 
   const children = [];
   // 目盛り（0・2・4・6・8 bits/byte）
   for (const level of [0, 2, 4, 6, 8]) {
-    const y = plotH - (level / 8) * plotH;
+    const y = padTop + plotH - (level / 8) * plotH;
     children.push(svgEl("line", { class: "entropy-grid", x1: padLeft, y1: y, x2: width, y2: y }));
     children.push(svgEl("text", { class: "entropy-axis", x: 0, y: y + 3 }, [document.createTextNode(String(level))]));
   }
@@ -409,7 +411,7 @@ function renderEntropyChart(){
     const bar = svgEl("rect", {
       class: `entropy-block band-${band}`,
       x: padLeft + i * barW,
-      y: plotH - h,
+      y: padTop + plotH - h,
       width: Math.max(1, barW - 0.5),
       height: h
     });
