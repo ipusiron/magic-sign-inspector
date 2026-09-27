@@ -1,7 +1,11 @@
 import { HexView } from "./hexview.js";
+import { validateEntries } from "./dict.js";
 
 const qs = s => document.querySelector(s);
 const qsa = s => Array.from(document.querySelectorAll(s));
+
+const DEBUG = false;
+const debugLog = (...args) => { if (DEBUG) console.log(...args); };
 
 let STATE = {
   dict: { version:"1.0", entries:[] },
@@ -25,6 +29,11 @@ async function init(){
 
   // HexView
   STATE.hex = new HexView(qs("#hexView"));
+
+  // このファイルはモジュールなので、外のスクリプトからは STATE が見えない。
+  // 必要なものだけを名前を付けて公開する（以前は window.STATE を参照しており、
+  // 常に undefined でショートカットが動いていなかった）。
+  window.MSI = { get hex() { return STATE.hex; } };
 
   // Tabs
   qsa(".main-tab").forEach(btn=>btn.addEventListener("click", onTab));
@@ -85,140 +94,14 @@ async function init(){
   await loadDefaultDict();
   renderSigTable();
   
-  // Remove any footer copy UI that might be lingering
-  cleanupFooterCopyUI();
 }
 
 /* ------------ Footer Copy UI Cleanup ------------ */
-function cleanupFooterCopyUI() {
-  // Ensure DOM is ready
-  if (!document.body) {
-    setTimeout(cleanupFooterCopyUI, 100);
-    return;
-  }
+// cleanupFooterCopyUI / setupCopyUIObserver は削除した。
+// 「コピー」を含むノードを見つけ次第消す仕掛けだったため、
+// 自作のコピー完了トーストを表示直後に消していた。
+// 元になったコンテキストメニューはすでに無効化されている。
 
-  try {
-    // Only target elements that are positioned at the bottom or have suspicious copy-related classes
-    const suspiciousCopyElements = document.querySelectorAll(`
-      [style*="position:fixed"][style*="bottom"],
-      [style*="position: fixed"][style*="bottom"], 
-      [class*="copy-ui"], 
-      [class*="floating-copy"], 
-      [id*="copy-ui"], 
-      [id*="floating-copy"], 
-      [class*="copy-toolbar"],
-      [class*="copy-floating"],
-      [class*="bottom-copy"]
-    `);
-    
-    suspiciousCopyElements.forEach(el => {
-      try {
-        // Double-check it's not our legitimate copy buttons
-        if (!el.closest('.hex-copy-buttons') && !el.closest('.hex-context-menu')) {
-          console.log('Removing suspicious positioned copy element:', el.tagName, el.className);
-          el.remove();
-        }
-      } catch (e) {
-        console.warn('Failed to remove suspicious element:', e);
-      }
-    });
-    
-    // Remove any fixed positioned elements that might be copy UI
-    const fixedElements = document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]');
-    fixedElements.forEach(el => {
-      try {
-        const style = el.style.cssText.toLowerCase();
-        if (style.includes('bottom') && (
-            (el.textContent && el.textContent.includes('コピー')) || 
-            el.classList.toString().includes('copy') ||
-            el.id.includes('copy')
-          )) {
-          console.log('Removing fixed copy UI element:', el);
-          el.remove();
-        }
-      } catch (e) {
-        console.warn('Failed to process fixed element:', e);
-      }
-    });
-    
-    // Remove any elements with copy-related class names or IDs
-    const suspiciousElements = document.querySelectorAll(
-      '[class*="copy-ui"], [class*="floating-copy"], [id*="copy-ui"], [id*="floating-copy"], [class*="copy-toolbar"]'
-    );
-    suspiciousElements.forEach(el => {
-      try {
-        if (!el.closest('.hex-copy-buttons') && !el.closest('.hex-context-menu')) {
-          console.log('Removing suspicious copy UI element:', el);
-          el.remove();
-        }
-      } catch (e) {
-        console.warn('Failed to remove suspicious element:', e);
-      }
-    });
-    
-    // Remove any existing context menu elements
-    const contextMenus = document.querySelectorAll('.hex-context-menu');
-    contextMenus.forEach(menu => {
-      console.log('Removing context menu:', menu);
-      menu.remove();
-    });
-
-    // Set up MutationObserver for dynamic content with copy-related texts
-    const copyTexts = ['16進数をコピー', 'ASCIIをコピー', '生バイトをコピー', 'コピー', 'copy'];
-    setupCopyUIObserver(copyTexts);
-    
-  } catch (error) {
-    console.warn('Error in cleanupFooterCopyUI:', error);
-  }
-}
-
-function setupCopyUIObserver(copyTexts) {
-  // Wait for DOM to be fully ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setupCopyUIObserver(copyTexts));
-    return;
-  }
-  
-  if (!document.body) {
-    setTimeout(() => setupCopyUIObserver(copyTexts), 100);
-    return;
-  }
-  
-  try {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach((node) => {
-            if (node && node.nodeType === Node.ELEMENT_NODE) {
-              try {
-                copyTexts.forEach(text => {
-                  if (node.textContent && node.textContent.includes(text) && 
-                      !node.closest('.hex-copy-buttons') && 
-                      !node.closest('.hex-context-menu') &&
-                      !node.closest('.help-content')) {
-                    console.log('Auto-removing dynamically added copy UI:', node);
-                    node.remove();
-                  }
-                });
-              } catch (e) {
-                // Ignore errors from removed nodes
-              }
-            }
-          });
-        }
-      });
-    });
-    
-    observer.observe(document.body, { 
-      childList: true, 
-      subtree: true 
-    });
-  } catch (error) {
-    console.warn('Failed to set up MutationObserver:', error);
-  }
-}
-
-/* ------------ File Information Handlers ------------ */
 function setupFileInfoHandlers() {
   // Hash copy buttons
   document.addEventListener('click', (e) => {
@@ -291,42 +174,9 @@ function initMobileTouchHandlers() {
     if (hint) hint.style.display = 'none';
   }
   
-  // Prevent iOS double-tap zoom on buttons
-  document.addEventListener('touchend', (e) => {
-    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-      e.preventDefault();
-    }
-  });
-  
-  // Swipe navigation for tabs
-  const tabPanels = qs('.tab-panels');
-  let startX = 0;
-  let startY = 0;
-  let isScrolling = undefined;
-  
-  tabPanels.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    startX = touch.clientX;
-    startY = touch.clientY;
-    isScrolling = undefined;
-  }, { passive: true });
-  
-  tabPanels.addEventListener('touchmove', (e) => {
-    if (e.touches.length > 1) return; // Multi-touch
-    
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - startX;
-    const deltaY = touch.clientY - startY;
-    
-    if (isScrolling === undefined) {
-      isScrolling = Math.abs(deltaY) > Math.abs(deltaX);
-    }
-    
-    // If horizontal swipe, prevent default scrolling
-    if (!isScrolling && Math.abs(deltaX) > 50) {
-      e.preventDefault();
-    }
-  }, { passive: false });
+  // ダブルタップの拡大抑止は CSS の touch-action で行う。
+  // document への touchend で preventDefault すると、合成されるクリックまで止まり、
+  // タッチ端末でボタンが反応しなくなる。
   
   tabPanels.addEventListener('touchend', (e) => {
     if (isScrolling || Math.abs(e.changedTouches[0].clientX - startX) < 80) {
@@ -392,8 +242,8 @@ function showHitContextMenu(row) {
       <p>長さ: ${hit.length || '-'} バイト</p>
       <p>信頼度: ${hit.confidence || '-'}%</p>
       <div class="context-menu-actions">
-        <button class="btn primary" onclick="STATE.hex.scrollToOffset(${hit.offset}); this.closest('.mobile-context-menu').remove();">ジャンプ</button>
-        <button class="btn" onclick="this.closest('.mobile-context-menu').remove();">閉じる</button>
+        <button class="btn primary" type="button" data-act="jump">ジャンプ</button>
+        <button class="btn" type="button" data-act="close">閉じる</button>
       </div>
     </div>
   `;
@@ -403,6 +253,15 @@ function showHitContextMenu(row) {
   // Remove on backdrop click
   menu.querySelector('.context-menu-backdrop').addEventListener('click', () => {
     menu.remove();
+  });
+
+  // インラインの onclick をやめ、ここで結ぶ。
+  // app.js はモジュールなので STATE は window から見えず、
+  // インラインの onclick からは参照できずに ReferenceError になっていた。
+  menu.addEventListener("click", (ev) => {
+    const act = ev.target?.dataset?.act;
+    if (act === "jump" && typeof hit.offset === "number") STATE.hex.scrollToOffset(hit.offset);
+    if (act === "jump" || act === "close") menu.remove();
   });
   
   // Auto-remove after 5 seconds
@@ -449,7 +308,7 @@ async function loadDefaultDict(){
   if (saved && qs("#setAutosave")?.checked !== false) {
     try {
       STATE.dict = JSON.parse(saved);
-      console.log("Loaded dictionary from localStorage");
+      debugLog("Loaded dictionary from localStorage");
       return;
     } catch (err) {
       console.warn("Failed to load from localStorage, loading default:", err);
@@ -461,7 +320,7 @@ async function loadDefaultDict(){
     const res = await fetch("sigs/default.json");
     const dict = await res.json();
     STATE.dict = dict;
-    console.log("Loaded default dictionary");
+    debugLog("Loaded default dictionary");
     
     // Check if enhanced dictionaries are available and offer to load them
     await loadEnhancedDictionaries();
@@ -509,7 +368,7 @@ async function loadEnhancedDictionaries() {
           
           STATE.dict.entries.push(...newEntries);
           totalAdded += newEntries.length;
-          console.log(`Loaded ${newEntries.length} signatures from ${name}`);
+          debugLog(`Loaded ${newEntries.length} signatures from ${name}`);
         }
       }
     } catch (err) {
@@ -518,7 +377,7 @@ async function loadEnhancedDictionaries() {
   }
   
   if (totalAdded > 0) {
-    console.log(`Total enhanced signatures loaded: ${totalAdded}`);
+    debugLog(`Total enhanced signatures loaded: ${totalAdded}`);
     // Save the enhanced dictionary to localStorage
     if (qs("#setAutosave")?.checked !== false) {
       localStorage.setItem("msi_dict", JSON.stringify(STATE.dict));
@@ -527,6 +386,57 @@ async function loadEnhancedDictionaries() {
 }
 
 /* ------------ Signatures UI ------------ */
+/**
+ * 要素を組み立てる小さなヘルパー。
+ * HTML文字列を作らないので、辞書の中身に何が入っていても表示が壊れない。
+ */
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(props)) {
+    if (name === "class") node.className = value;
+    else if (name === "text") node.textContent = value;
+    else if (name === "dataset") Object.assign(node.dataset, value);
+    else if (value !== null && typeof value !== "undefined") node.setAttribute(name, value);
+  }
+  for (const child of [].concat(children)) {
+    if (child) node.append(child);
+  }
+  return node;
+}
+
+/**
+ * シグネチャ1件の行を組み立てる。
+ * 以前は拡張子・カテゴリ・idをそのままHTMLへ差し込んでいた。
+ * 辞書はインポートできて localStorage へ残るので、
+ * 壊れた値を入れた辞書を読ませるだけで表示を乗っ取れる状態だった。
+ * とくに id は data-id="${e.id}" と属性に入れており、
+ * 引用符ひとつで属性から抜け出せた。
+ */
+function buildSigRow(e) {
+  const exts = (e.extensions || []).join(",") || "-";
+  const patt = (e.pattern || "").slice(0, 50) + (e.pattern && e.pattern.length > 50 ? "…" : "");
+  const off = e.offset?.type === "absolute" ? `@${e.offset.value || 0}` : "relative";
+  const conf = e.confidence ?? 80;
+  const enabled = e.enabled !== false;
+
+  const checkbox = el("input", { type: "checkbox", dataset: { act: "toggle" } });
+  checkbox.checked = enabled;
+
+  const tr = el("tr", { dataset: { id: String(e.id ?? "") } }, [
+    el("td", { class: "cell-center" }, [checkbox]),
+    el("td", { class: "name", text: e.name || "" }),
+    el("td", { text: exts }),
+    el("td", {}, [el("code", { text: patt })]),
+    el("td", { text: off }),
+    el("td", {}, [el("span", { class: "badge", text: e.category || "-" })]),
+    el("td", { class: "cell-center", text: `${conf}%` }),
+    el("td", {}, [el("button", { class: "btn btn-sm", type: "button", dataset: { act: "select" }, text: "編集" })])
+  ]);
+
+  if (STATE.selectedId === e.id) tr.className = "selected";
+  return tr;
+}
+
 function renderSigTable(){
   const tbody = qs("#sigTbody");
   const search = qs("#sigSearch").value.trim().toLowerCase();
@@ -541,27 +451,14 @@ function renderSigTable(){
       const s = `${e.name} ${(e.extensions||[]).join(",")} ${e.category}`.toLowerCase();
       return s.includes(search);
     })
-    .map(e=>{
-      const exts = (e.extensions||[]).join(",") || "-";
-      const patt = (e.pattern||"").slice(0,50) + (e.pattern && e.pattern.length>50 ? "…" : "");
-      const off = e.offset?.type==="absolute" ? `@${e.offset.value||0}` : "relative";
-      const conf = e.confidence ?? 80;
-      const enabled = e.enabled !== false;
-      const selected = (STATE.selectedId === e.id) ? ' class="selected"' : "";
-      return `<tr data-id="${e.id}"${selected}>
-        <td style="text-align:center"><input type="checkbox" ${enabled?"checked":""} data-act="toggle" /></td>
-        <td class="name">${escapeHtml(e.name||"")}</td>
-        <td>${exts}</td>
-        <td><code>${escapeHtml(patt)}</code></td>
-        <td>${off}</td>
-        <td><span class="badge">${e.category||"-"}</span></td>
-        <td style="text-align:center">${conf}%</td>
-        <td>
-          <button class="btn btn-sm" data-act="select">編集</button>
-        </td>
-      </tr>`;
-    }).join("");
-  tbody.innerHTML = rows || `<tr><td colspan="8" class="muted">シグネチャがありません</td></tr>`;
+    .map(buildSigRow);
+
+  tbody.replaceChildren();
+  if (rows.length === 0) {
+    tbody.append(el("tr", {}, [el("td", { colspan: "8", class: "muted", text: "シグネチャがありません" })]));
+  } else {
+    tbody.append(...rows);
+  }
 
   // bind
   tbody.querySelectorAll("tr").forEach(tr=>{
@@ -854,30 +751,12 @@ function readFileStandard(file) {
     const reader = new FileReader();
     let hasProgressEvents = false;
     
-    // Enhanced progress simulation
-    const simulateProgress = () => {
-      let progress = 0;
-      const increment = file.size > 10 * 1024 * 1024 ? 3 : 12; // Smoother for large files
-      const interval = setInterval(() => {
-        if (hasProgressEvents) {
-          clearInterval(interval);
-          return;
-        }
-        
-        progress += increment + Math.random() * 5;
-        if (progress >= 95) {
-          progress = 95;
-          clearInterval(interval);
-        }
-        
-        const loaded = (file.size * progress / 100 / 1024 / 1024).toFixed(1);
-        const total = (file.size / 1024 / 1024).toFixed(1);
-        setProgress(progress, `${loaded}MB / ${total}MB`);
-      }, 30);
-      
-      return interval;
-    };
-    
+    // 実際の読み込み量が取れないときは、割合を作らずに「読み込み中」とだけ出す。
+    // 以前は乱数で進むバーを見せており、実際の進み具合と関係がなかった。
+    const simulateProgress = () => setInterval(() => {
+      if (!hasProgressEvents) setProgress(null, "読み込み中");
+    }, 200);
+
     const progressInterval = simulateProgress();
     
     reader.onload = (e) => {
@@ -981,7 +860,7 @@ function onScanMessage(e){
     STATE.hits = hits || [];
     STATE.scanSkipped = e.data.skipped || null;
     STATE.trailerChecked = e.data.trailerChecked !== false;
-    console.log('Received hits from worker:', STATE.hits);
+    debugLog('Received hits from worker:', STATE.hits);
     renderHits(STATE.hits);
     
     // Update file info with scan results
@@ -1010,15 +889,20 @@ function onScanMessage(e){
 }
 
 function setProgress(p, text){
-  const pct = Math.min(100, Math.max(0, p));
-  console.log(`Progress update: ${pct.toFixed(1)}% - ${text || 'no text'}`);
-  qs("#progressBar").style.width = `${pct}%`;
+  const bar = qs("#progressBar");
   const progressText = qs("#progressText");
-  if (text) {
-    progressText.textContent = `${text} (${Math.round(pct)}%)`;
-  } else {
-    progressText.textContent = `${Math.round(pct)}%`;
+
+  // p が null のときは割合が分からない。数字を作らず、動いていることだけを見せる
+  if (p === null || typeof p === "undefined") {
+    bar.classList.add("indeterminate");
+    progressText.textContent = text || "処理中";
+    return;
   }
+
+  bar.classList.remove("indeterminate");
+  const pct = Math.min(100, Math.max(0, p));
+  bar.style.width = `${pct}%`;
+  progressText.textContent = text ? `${text} (${Math.round(pct)}%)` : `${Math.round(pct)}%`;
 }
 
 // Generate descriptive note for hit based on signature name
@@ -1116,7 +1000,7 @@ function renderHits(hits){
   }
   
   const rows = hits.map((h,i)=>{
-    console.log(`Rendering hit ${i}:`, {name: h.name, offset: h.offset, length: h.length, confidence: h.confidence});
+    debugLog(`Rendering hit ${i}:`, {name: h.name, offset: h.offset, length: h.length, confidence: h.confidence});
     let offsetDisplay = 'undefined';
     if (typeof h.offset === 'number' && !isNaN(h.offset) && h.offset >= 0) {
       offsetDisplay = `0x${h.offset.toString(16).padStart(8, '0').toUpperCase()}`;
@@ -1299,10 +1183,21 @@ async function onImport(){
     const data = JSON.parse(text);
     if (data.entries && Array.isArray(data.entries)){
       const policy = qs("#mergePolicy").value;
-      mergeEntries(data.entries, policy);
-      renderSigTable();
-      saveLocal();
-      toast(`インポート完了: ${data.entries.length} 件`);
+      const { accepted, errors } = validateEntries(data.entries);
+
+      if (accepted.length > 0) {
+        mergeEntries(accepted, policy);
+        renderSigTable();
+        saveLocal();
+      }
+      toast(`インポート完了: ${accepted.length} 件`);
+
+      // 落ちたものは黙って捨てず、件数と理由の例を伝える
+      if (errors.length > 0) {
+        toast(`${errors.length}件を取り込めませんでした（例: ${errors[0]}）`);
+      }
+    } else {
+      throw new Error("entries の配列が見つかりません");
     }
   } catch(err) {
     alert(`インポートエラー: ${err.message}`);
@@ -1356,7 +1251,7 @@ function saveLocal(){
 
 function toast(msg){
   // Simple console log for MVP
-  console.log(`[Toast] ${msg}`);
+  debugLog(`[Toast] ${msg}`);
 }
 
 function escapeHtml(str){
@@ -1416,12 +1311,12 @@ async function initializeHexViewProgressive(file, buffer) {
     setTimeout(() => {
       if (STATE.file === file) { // Ensure file hasn't changed
         STATE.hex.setBuffer(buffer);
-        console.log('Full HEX view loaded for large file');
+        debugLog('Full HEX view loaded for large file');
       }
     }, 1000);
   } else { // > 100MB: very conservative approach
     showPartialHexView(buffer, 1024 * 1024); // Show first 1MB only
-    console.log('Large file detected - showing partial HEX view only');
+    debugLog('Large file detected - showing partial HEX view only');
   }
 }
 
@@ -1433,12 +1328,15 @@ function showPartialHexView(buffer, maxBytes) {
   if (maxBytes < buffer.byteLength) {
     const infoElement = document.createElement('div');
     infoElement.className = 'hex-partial-info';
-    infoElement.innerHTML = `
-      <div style="background: var(--warning-bg); color: var(--warning-fg); padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px;">
-        📝 大容量ファイルのため、先頭 ${(maxBytes/1024/1024).toFixed(1)}MB のみ表示中
-        <button onclick="this.parentElement.parentElement.remove(); STATE.hex.setBuffer(STATE.buffer);" style="margin-left: 8px; font-size: 11px;">全体を表示</button>
-      </div>
-    `;
+    const banner = el("div", { class: "hex-partial-banner" }, [
+      document.createTextNode(`📝 大容量ファイルのため、先頭 ${(maxBytes/1024/1024).toFixed(1)}MB のみ表示中`),
+      el("button", { class: "btn btn-sm", type: "button", text: "全体を表示" })
+    ]);
+    banner.querySelector("button").addEventListener("click", () => {
+      infoElement.remove();
+      STATE.hex.setBuffer(STATE.buffer);
+    });
+    infoElement.replaceChildren(banner);
     
     const hexView = qs('#hexView');
     hexView.insertBefore(infoElement, hexView.firstChild);

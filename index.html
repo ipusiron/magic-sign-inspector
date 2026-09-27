@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <title>MagicSign Inspector — マジックナンバー可視化・検証ツール (MVP)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>MagicSign Inspector — マジックナンバー可視化・検証ツール</title>
   <meta name="description" content="ファイルシグネチャ（マジックナンバー）を可視化・編集・検証する軽量フォレンジック補助ツール。ブラウザー内で完結、外部送信なし。" />
   <link rel="icon" href="assets/favicon.svg" />
   <link rel="stylesheet" href="style.css" />
@@ -35,11 +35,11 @@
       <span class="hint-text">← スワイプでタブ移動 →</span>
     </div>
     <nav class="main-tabs" role="tablist" aria-label="機能タブ">
-      <button class="main-tab active" data-tab="signatures" role="tab" aria-selected="true" aria-controls="tab-signatures">📝 シグネチャ一覧</button>
-      <button class="main-tab" data-tab="inspect" role="tab" aria-selected="false" aria-controls="tab-inspect">🔍 検査</button>
-      <button class="main-tab" data-tab="edit" role="tab" aria-selected="false" aria-controls="tab-edit">✏️ 編集</button>
-      <button class="main-tab" data-tab="dictio" role="tab" aria-selected="false" aria-controls="tab-dictio">📁 辞書 I/O</button>
-      <button class="main-tab" data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings">⚙️ 設定/ヘルプ</button>
+      <button class="main-tab active" id="maintab-signatures" data-tab="signatures" role="tab" aria-selected="true" aria-controls="tab-signatures">📝 シグネチャ一覧</button>
+      <button class="main-tab" id="maintab-inspect" data-tab="inspect" role="tab" aria-selected="false" aria-controls="tab-inspect">🔍 検査</button>
+      <button class="main-tab" id="maintab-edit" data-tab="edit" role="tab" aria-selected="false" aria-controls="tab-edit">✏️ 編集</button>
+      <button class="main-tab" id="maintab-dictio" data-tab="dictio" role="tab" aria-selected="false" aria-controls="tab-dictio">📁 辞書 I/O</button>
+      <button class="main-tab" id="maintab-settings" data-tab="settings" role="tab" aria-selected="false" aria-controls="tab-settings">⚙️ 設定/ヘルプ</button>
     </nav>
   </header>
 
@@ -51,7 +51,7 @@
     <!-- Panels -->
     <div class="tab-panels">
       <!-- ---------- Signatures Panel ---------- -->
-      <section id="tab-signatures" class="tab-panel active" role="tabpanel" aria-labelledby="シグネチャ一覧">
+      <section id="tab-signatures" class="tab-panel active" role="tabpanel" tabindex="0" aria-labelledby="maintab-signatures">
         <div class="pane-head">
           <div class="filters">
             <input id="sigSearch" type="search" placeholder="名前・拡張子・カテゴリで検索…" aria-label="シグネチャ検索" />
@@ -102,7 +102,7 @@
       </section>
 
       <!-- ---------- Inspect Panel ---------- -->
-      <section id="tab-inspect" class="tab-panel" role="tabpanel" aria-labelledby="検査">
+      <section id="tab-inspect" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="maintab-inspect">
           <div class="drop-area" id="dropArea" tabindex="0" aria-label="ファイルをドロップして解析">
             <div class="drop-content">
               <svg class="drop-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -187,7 +187,7 @@
                   <span class="info-label">Exif情報:</span>
                   <span class="info-value">
                     <a href="https://ipusiron.github.io/image-exif-checker/" 
-                       target="_blank" 
+                       target="_blank" rel="noopener noreferrer" 
                        class="exif-check-link"
                        title="Image Exif CheckerでExif情報を確認">
                       <span class="exif-icon">📸</span>
@@ -280,7 +280,7 @@
         </section>
 
         <!-- ---------- Edit Panel ---------- -->
-        <section id="tab-edit" class="tab-panel" role="tabpanel" aria-labelledby="編集">
+        <section id="tab-edit" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="maintab-edit">
           <h3>シグネチャ編集</h3>
           <p class="tab-description">
             ファイル形式を識別するためのバイトパターン（シグネチャ）を新規作成・編集できます。
@@ -373,7 +373,7 @@
         </section>
 
         <!-- ---------- Dictionary I/O Panel ---------- -->
-        <section id="tab-dictio" class="tab-panel" role="tabpanel" aria-labelledby="辞書 I/O">
+        <section id="tab-dictio" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="maintab-dictio">
           <h3>辞書 I/O</h3>
           <p class="tab-description">
             シグネチャ辞書の外部ファイルとの入出力を行います。
@@ -415,7 +415,7 @@
         </section>
 
         <!-- ---------- Settings/Help Panel ---------- -->
-        <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="設定/ヘルプ">
+        <section id="tab-settings" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="maintab-settings">
           <h3>設定 / ヘルプ</h3>
 
           <!-- View Settings Accordion -->
@@ -469,7 +469,7 @@
                     <li><kbd>Ctrl/Cmd</kbd> + <kbd>A</kbd> : すべて選択</li>
                     <li><kbd>Ctrl/Cmd</kbd> + <kbd>G</kbd> : オフセットへジャンプ</li>
                     <li><kbd>Esc</kbd> : 選択解除</li>
-                    <li><strong>マウス</strong> : ドラッグで範囲選択、右クリックでメニュー</li>
+                    <li><strong>マウス</strong> : ドラッグで範囲選択。コピーはツールバーのHEX／ASCII／RAWボタン</li>
                   </ul>
                 </div>
               </div>
@@ -516,7 +516,7 @@
   ========================================================== -->
   <footer>
     <div class="footer">
-      🔗 GitHubリポジトリはこちら（ <a href="https://github.com/ipusiron/magic-sign-inspector" target="_blank" rel="noopener">ipusiron/magic-sign-inspector</a> ）
+      🔗 GitHubリポジトリはこちら（ <a href="https://github.com/ipusiron/magic-sign-inspector" target="_blank" rel="noopener noreferrer">ipusiron/magic-sign-inspector</a> ）
     </div>
   </footer>
 
@@ -568,117 +568,8 @@
   <!-- =========================================================
        Scripts
   ========================================================== -->
-  <script>
-    // キーボードショートカット
-    document.addEventListener('keydown', (e) => {
-      // Skip if user is typing in input fields
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
-        return;
-      }
-      
-      const isMac = navigator.platform.toUpperCase().includes('MAC');
-      
-      // File open: Ctrl/Cmd + O
-      if ((isMac && e.metaKey && e.key.toLowerCase() === 'o') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'o')) {
-        e.preventDefault();
-        document.getElementById('fileInput').click();
-      }
-      
-      // Help: ? key
-      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        // Switch to settings/help tab
-        const helpTab = document.querySelector('[data-tab="settings"]');
-        if (helpTab) {
-          helpTab.click();
-        }
-      }
-      
-      // Navigate to signatures search: /
-      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        const sigTab = document.querySelector('[data-tab="signatures"]');
-        const searchInput = document.getElementById('sigSearch');
-        if (sigTab && searchInput) {
-          sigTab.click();
-          setTimeout(() => searchInput.focus(), 100);
-        }
-      }
-      
-      // Edit selected signature: E
-      if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        const editTab = document.querySelector('[data-tab="edit"]');
-        if (editTab) {
-          editTab.click();
-        }
-      }
-      
-      // Next/Previous hit navigation: F/Shift+F
-      if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        if (e.shiftKey) {
-          document.getElementById('jumpPrev')?.click();
-        } else {
-          document.getElementById('jumpNext')?.click();
-        }
-      }
-      
-      // Jump to offset: G
-      if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        const jumpInput = document.getElementById('jumpOffset');
-        if (jumpInput) {
-          jumpInput.focus();
-          jumpInput.select();
-        }
-      }
-      
-      // HEX view keyboard shortcuts (when hex view is active)
-      const currentTab = document.querySelector('.main-tab.active')?.dataset?.tab;
-      if (currentTab === 'inspect') {
-        const hexView = document.getElementById('hexView');
-        
-        // Copy hex: Ctrl+C 
-        if ((isMac && e.metaKey && e.key.toLowerCase() === 'c') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'c')) {
-          // Check if we're in a text input field
-          if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !e.target.isContentEditable) {
-            e.preventDefault();
-            // Trigger HEX view copy functionality
-            if (window.STATE && window.STATE.hex) {
-              if (e.shiftKey) {
-                window.STATE.hex.copySelection('ascii');
-              } else if (e.altKey) {
-                window.STATE.hex.copySelection('bytes');
-              } else {
-                window.STATE.hex.copySelection('hex');
-              }
-            }
-          }
-        }
-        
-        // Select all in hex view: Ctrl+A
-        if ((isMac && e.metaKey && e.key.toLowerCase() === 'a') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'a')) {
-          if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !e.target.isContentEditable) {
-            e.preventDefault();
-            if (window.STATE && window.STATE.hex) {
-              window.STATE.hex.selectAll();
-            }
-          }
-        }
-        
-        // Jump to offset in hex view: Ctrl+G
-        if ((isMac && e.metaKey && e.key.toLowerCase() === 'g') || (!isMac && e.ctrlKey && e.key.toLowerCase() === 'g')) {
-          if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !e.target.isContentEditable) {
-            e.preventDefault();
-            if (window.STATE && window.STATE.hex) {
-              window.STATE.hex.showJumpDialog();
-            }
-          }
-        }
-      }
-    });
-  </script>
+  <!-- キーボードショートカットは js/shortcuts.js へ移した（CSPでインラインを許可しないため） -->
+  <script src="js/shortcuts.js" type="module"></script>
   <script src="js/fileinfo.js"></script>
   <script src="js/hexview.js" type="module"></script>
   <script src="js/app.js" type="module"></script>

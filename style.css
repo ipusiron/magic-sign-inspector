@@ -11,6 +11,9 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --radius:14px;
   --shadow: 0 10px 25px rgba(0,0,0,.06);
+  /* 部分表示のバナーと、終端が見つからない印。以前は未定義で背景が透けていた */
+  --warning-bg: #fff8e6;
+  --warning-fg: #7a4f00;
 }
 :root.dark{
   --bg:#0f172a;
@@ -23,6 +26,8 @@
   --danger:#ef4444;
   --code:#f8fafc;
   --shadow: 0 12px 28px rgba(0,0,0,.4);
+  --warning-bg: #3a2c12;
+  --warning-fg: #f0d9b5;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -2185,4 +2190,40 @@ footer{
 .hit-trailer.trailer-missing{
   color: var(--warning-fg, #b3831f);
   font-weight: 700;
+}
+
+/* 表の中央寄せ（以前は style 属性で書かれていた） */
+.cell-center{
+  text-align: center;
+}
+
+/* 大容量ファイルの部分表示バナー（以前は style 属性で書かれていた） */
+.hex-partial-banner{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: 12px;
+}
+
+/* ダブルタップの拡大抑止（document の touchend を使わない） */
+button, .btn, .main-tab, label{
+  touch-action: manipulation;
+}
+
+/* 割合が分からないときの進捗表示 */
+.progress-bar.indeterminate{
+  width: 40% !important;
+  animation: msi-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes msi-indeterminate{
+  0%   { margin-left: 0; }
+  50%  { margin-left: 60%; }
+  100% { margin-left: 0; }
 }
