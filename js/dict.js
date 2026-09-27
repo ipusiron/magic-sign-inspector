@@ -80,3 +80,92 @@ export function validateEntries(list) {
   return { accepted, errors };
 }
 
+
+/**
+ * foremost.conf の1行に使う形へ直す。
+ * foremost はバイトごとに \x を付けた書き方を読む。
+ * 以前は "FF D8" を "\xffd8" と1つの \x でつなげて書き出しており、
+ * 生成した conf はそのままでは使えなかった。
+ * 任意の1バイト（??）は foremost の ? に置き換える。
+ * 範囲指定（[00-1F]）は foremost に対応する書き方がないので、扱えないことを返す。
+ */
+export function toForemostBytes(pattern) {
+  const tokens = (pattern || "").trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return { error: "パターンが空です" };
+
+  const parts = [];
+  for (const token of tokens) {
+    if (/^\?\?$/.test(token)) {
+      parts.push("?");
+    } else if (/^[0-9A-Fa-f]{2}$/.test(token)) {
+      parts.push(`\\x${token.toLowerCase()}`);
+    } else {
+      return { error: `foremost では扱えない書き方です: ${token}` };
+    }
+  }
+  return { value: parts.join("") };
+}
+
+/**
+ * foremost.conf を読む。
+ * 1行が「拡張子 大小文字の区別 サイズ ヘッダー [フッター]」で、# から後ろは注釈。
+ * 自分で書き出した conf を読み戻せるようにする。
+ */
+export function parseForemostConf(text) {
+  const accepted = [];
+  const errors = [];
+
+  const fromForemost = (token) => {
+    const bytes = [];
+    let i = 0;
+    while (i < token.length) {
+      if (token[i] === "?") { bytes.push("??"); i += 1; continue; }
+      const m = token.slice(i).match(/^\\x([0-9A-Fa-f]{2})/);
+      if (m) { bytes.push(m[1].toUpperCase()); i += 4; continue; }
+      return null;
+    }
+    return bytes.length ? bytes.join(" ") : null;
+  };
+
+  (text || "").split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.split("#")[0].trim();
+    if (!line) return;
+
+    const cols = line.split(/\s+/);
+    if (cols.length < 4) {
+      errors.push(`${index + 1}行目: 列が足りません`);
+      return;
+    }
+
+    const [ext, , sizeText, headerText, footerText] = cols;
+    const pattern = fromForemost(headerText);
+    if (!pattern) {
+      errors.push(`${index + 1}行目（${ext}）: ヘッダーを読めません`);
+      return;
+    }
+
+    const entry = {
+      name: `${ext.toUpperCase()} (foremost)`,
+      pattern,
+      offset: { type: "absolute", value: 0 },
+      extensions: [ext.replace(/^\./, "")],
+      category: "imported",
+      confidence: 80
+    };
+
+    const size = Number(sizeText);
+    if (Number.isFinite(size) && size > 0) entry.max_size = size;
+
+    if (footerText) {
+      const trailer = fromForemost(footerText);
+      if (trailer) {
+        entry.trailer = trailer;
+        entry.requires_trailer = true;
+      }
+    }
+
+    accepted.push(entry);
+  });
+
+  return { accepted, errors };
+}

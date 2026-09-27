@@ -1,5 +1,5 @@
 import { HexView } from "./hexview.js";
-import { validateEntries } from "./dict.js";
+import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
 
 const qs = s => document.querySelector(s);
 const qsa = s => Array.from(document.querySelectorAll(s));
@@ -1149,25 +1149,48 @@ function exportJson(entries){
 }
 
 function exportForemost(entries){
-  // Simplified foremost.conf format
-  let conf = "# Foremost configuration file (generated)\n\n";
+  const lines = [
+    "# foremost 設定ファイル（MagicSign Inspector が生成）",
+    "# 書式: 拡張子  大小文字の区別  最大サイズ  ヘッダー  [フッター]",
+    ""
+  ];
+  const skipped = [];
+
   entries.forEach(e => {
     if (!e.pattern || !e.extensions?.length) return;
-    const ext = e.extensions[0];
-    const header = e.pattern.replace(/\s+/g, "").toLowerCase();
-    const footer = e.trailer ? e.trailer.replace(/\s+/g, "").toLowerCase() : "";
-    const size = e.max_size || 20000000;
-    conf += `${ext}\ty\t${size}\t\\x${header}`;
-    if (footer) conf += `\t\\x${footer}`;
-    conf += "\n";
+
+    const header = toForemostBytes(e.pattern);
+    if (header.error) {
+      // 範囲指定は foremost に対応する書き方がない。黙って壊れた行を出さない
+      skipped.push(`${e.name || e.extensions[0]}: ${header.error}`);
+      return;
+    }
+
+    let line = `${e.extensions[0]}\ty\t${e.max_size || 20000000}\t${header.value}`;
+
+    if (e.trailer) {
+      const footer = toForemostBytes(e.trailer);
+      if (footer.error) {
+        skipped.push(`${e.name || e.extensions[0]}: 終端が ${footer.error}`);
+        return;
+      }
+      line += `\t${footer.value}`;
+    }
+
+    lines.push(line);
   });
-  const blob = new Blob([conf], {type: "text/plain"});
+
+  const blob = new Blob([lines.join("\n") + "\n"], {type: "text/plain"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = "foremost.conf";
   a.click();
   URL.revokeObjectURL(url);
+
+  if (skipped.length > 0) {
+    toast(`${skipped.length}件は foremost の書式にできないため省きました（例: ${skipped[0]}）`);
+  }
 }
 
 async function onImport(){
@@ -1178,8 +1201,25 @@ async function onImport(){
   
   try {
     const text = await file.text();
+    const firstBody = text.trim().split(/\r?\n/).find((l) => l.trim() && !l.trim().startsWith("#")) || "";
+    const isConf = /\.conf$/i.test(file.name) || !firstBody.startsWith("{");
     await new Promise(resolve => setTimeout(resolve, 200)); // Show animation
     
+    // foremost.conf も読めるようにした。
+    // UIとREADMEは以前から .conf 対応を謳っていたが、実装は JSON.parse だけで、
+    // .conf を選ぶと必ず「インポートエラー」になっていた。
+    if (isConf) {
+      const { accepted, errors } = parseForemostConf(text);
+      if (accepted.length > 0) {
+        mergeEntries(validateEntries(accepted).accepted, qs("#mergePolicy").value);
+        renderSigTable();
+        saveLocal();
+      }
+      toast(`インポート完了: ${accepted.length} 件`);
+      if (errors.length > 0) toast(`${errors.length}行を読めませんでした（例: ${errors[0]}）`);
+      return;
+    }
+
     const data = JSON.parse(text);
     if (data.entries && Array.isArray(data.entries)){
       const policy = qs("#mergePolicy").value;

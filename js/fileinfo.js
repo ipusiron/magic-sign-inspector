@@ -200,7 +200,7 @@ function md5Internal(data) {
 
 function updateHashUI(hashType, hashValue) {
   const element = document.querySelector(`#fileInfo${hashType}`);
-  element.innerHTML = `<span style="word-break: break-all;">${hashValue}</span>`;
+  element.innerHTML = `<span class="hash-text">${hashValue}</span>`;
 }
 
 async function calculateFileEntropy(buffer) {
@@ -216,11 +216,16 @@ async function calculateFileEntropy(buffer) {
       <div class="entropy-bar">
         <span class="entropy-value">${entropy.toFixed(3)}</span>
         <div class="entropy-visual">
-          <div class="entropy-fill" style="width: ${entropyPercent}%"></div>
+          <div class="entropy-fill" data-percent="${entropyPercent}"></div>
         </div>
-        <span style="font-size: 11px; color: var(--muted);">${entropyPercent.toFixed(1)}%</span>
+        <span class="entropy-label">${entropyPercent.toFixed(1)}%</span>
       </div>
     `;
+
+    // 幅は style 属性ではなく CSSOM で指定する。
+    // マークアップの style 属性は CSP の style-src-attr に触れる。
+    const fill = entropyElement.querySelector('.entropy-fill');
+    if (fill) fill.style.width = `${entropyPercent}%`;
     
   } catch (error) {
     console.error('Entropy calculation failed:', error);

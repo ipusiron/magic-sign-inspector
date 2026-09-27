@@ -2227,3 +2227,20 @@ button, .btn, .main-tab, label{
   50%  { margin-left: 60%; }
   100% { margin-left: 0; }
 }
+
+/* 表の列幅（以前は style 属性で書かれていた。CSPの style-src-attr に触れる） */
+.col-w60{ width: 60px; }
+.col-w80{ width: 80px; }
+.col-w100{ width: 100px; }
+.col-min180{ min-width: 180px; }
+.col-min250{ min-width: 250px; }
+.mt-8{ margin-top: 8px; }
+
+/* 進捗バーは幅0から始める */
+.progress-bar{ width: 0; }
+
+/* 以前は style 属性で指定していたもの */
+.hash-text{ word-break: break-all; }
+.entropy-label{ font-size: 11px; color: var(--muted); }
+.hex-scroller{ position: relative; }
+.hex-content{ position: absolute; top: 0; left: 0; width: 100%; }

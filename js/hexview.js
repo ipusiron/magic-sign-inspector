@@ -30,8 +30,8 @@ export class HexView {
     this.el.style.position = 'relative';
     this.el.style.overflow = 'auto';
     this.el.innerHTML = `
-      <div class="hex-scroller" style="position: relative;">
-        <div class="hex-content" style="position: absolute; top: 0; left: 0; width: 100%;"></div>
+      <div class="hex-scroller">
+        <div class="hex-content"></div>
       </div>
     `;
     this.scroller = this.el.querySelector('.hex-scroller');
