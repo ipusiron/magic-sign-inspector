@@ -269,6 +269,7 @@
                     <span class="text">RAW</span>
                   </button>
                 </div>
+                <button id="hexFindOpen" class="btn" type="button" data-i18n="hex.findButton" data-i18n-title="find.title" title="HEXビューを検索">🔍 検索</button>
                 <button id="jumpPrev" class="btn" data-i18n="hex.prev">← 前ヒット</button>
                 <button id="jumpNext" class="btn" data-i18n="hex.next">次ヒット →</button>
                 <label class="grow">
@@ -276,6 +277,17 @@
                   <input id="jumpOffset" type="text" data-i18n-placeholder="hex.jumpPlaceholder" placeholder="例: 4096 または 0x1000" />
                 </label>
                 <button id="jumpGo" class="btn" data-i18n="hex.go">移動</button>
+              </div>
+              <div id="hexFind" class="hex-find" role="search" data-i18n-aria-label="find.title" aria-label="HEXビューを検索" hidden>
+                <input id="hexFindInput" type="search" data-i18n-placeholder="find.placeholder" placeholder="例: FF D8 または JFIF" data-i18n-aria-label="find.title" aria-label="HEXビューを検索" />
+                <select id="hexFindMode" data-i18n-aria-label="find.title" aria-label="HEXビューを検索">
+                  <option value="hex" data-i18n="find.modeHex">16進</option>
+                  <option value="text" data-i18n="find.modeText">文字</option>
+                </select>
+                <button id="hexFindPrev" class="btn btn-sm" type="button" data-i18n-title="find.prev" data-i18n-aria-label="find.prev" title="前へ" aria-label="前へ">←</button>
+                <button id="hexFindNext" class="btn btn-sm" type="button" data-i18n-title="find.next" data-i18n-aria-label="find.next" title="次へ" aria-label="次へ">→</button>
+                <span id="hexFindCount" class="hex-find-count" aria-live="polite"></span>
+                <button id="hexFindClose" class="btn btn-sm" type="button" data-i18n-title="find.close" data-i18n-aria-label="find.close" title="検索を閉じる" aria-label="検索を閉じる">✕</button>
               </div>
               <div id="hexView" class="hexview" role="region" data-i18n-aria-label="hex.viewAria" aria-label="HEXビュー" tabindex="0">
                 <!-- js/hexview.js が描画 -->

@@ -1646,23 +1646,12 @@ footer{
   box-shadow: 0 4px 16px rgba(59,130,246,0.4);
 }
 
-/* Force hide any floating copy UI that might be at the bottom */
-*[class*="copy-ui"],
-*[class*="floating-copy"],
-*[id*="copy-ui"],
-*[id*="floating-copy"],
-*[class*="copy-toolbar"],
-*[class*="copy-buttons-fixed"] {
-  display: none !important;
-}
+/* 以前ここには「浮遊コピーUIを強制的に隠す」ルールが3つあった。
+   対象の要素は全タブ・走査後を測っても0件で、唯一効いていたのは
+   自分のコンテキストメニューを display:none !important で殺すことだった。
+   属性セレクタ（[style*="position:fixed"] など）は将来の要素も巻き込むため、
+   根本（JS側の掃除処理と style 属性）を除いたうえで、まとめて削除した。 */
 
-/* Hide elements with inline styles for bottom positioning */
-[style*="position:fixed"][style*="bottom"],
-[style*="position: fixed"][style*="bottom"],
-[style*="position:absolute"][style*="bottom"],
-[style*="position: absolute"][style*="bottom"] {
-  display: none !important;
-}
 
 /* Mobile responsiveness for hex toolbar */
 @media (max-width: 768px) {
@@ -2165,22 +2154,6 @@ footer{
   }
 }
 
-/* Force hide any floating copy UI elements - CRITICAL FIX */
-[style*="position:fixed"][style*="bottom"]:not(.hex-context-menu):not(.toast):not(.modal),
-[style*="position: fixed"][style*="bottom"]:not(.hex-context-menu):not(.toast):not(.modal),
-[class*="copy-ui"]:not(.hex-copy-buttons),
-[class*="floating-copy"],
-[id*="copy-ui"],
-[id*="floating-copy"],
-[class*="copy-toolbar"]:not(.hex-copy-buttons),
-[class*="copy-floating"],
-[class*="bottom-copy"],
-.hex-context-menu {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
 
 /* 終端の照合結果。見つからないときだけ目立たせる */
 .hit-trailer{
@@ -2396,4 +2369,74 @@ input[type="search"]{
 @media (min-width: 1201px){
   /* HEXビューの側を広くする。ヒット一覧は6列で足りる */
   .inspect-grid{ grid-template-columns: 1fr 1.6fr; }
+}
+
+/* HEXビューの検索バー。Ctrl+F と右クリックメニューから開く */
+.hex-find{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.hex-find[hidden]{ display: none; }
+.hex-find input[type="search"]{
+  flex: 1 1 200px;
+  min-width: 140px;
+}
+.hex-find .btn{ flex: 0 0 auto; }
+.hex-find-count{
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 64px;
+}
+.hex-find-count.warn{ color: var(--warning-fg); }
+
+/* 検索で当たった位置。ヒット由来のハイライトとは別の色にする */
+.hex-byte.found,
+.hex-char.found{
+  background: #fde68a;
+  color: #713f12;
+  border-radius: 3px;
+}
+.hex-byte.found-current,
+.hex-char.found-current{
+  background: #f59e0b;
+  color: #1c1917;
+  font-weight: 700;
+}
+:root.dark .hex-byte.found,
+:root.dark .hex-char.found{
+  background: #78350f;
+  color: #fde68a;
+}
+:root.dark .hex-byte.found-current,
+:root.dark .hex-char.found-current{
+  background: #f59e0b;
+  color: #1c1917;
+}
+
+/* HEXビューのトースト（以前は style.cssText で組み立てていた） */
+.hex-toast{
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10001;
+  font-size: 14px;
+  max-width: 300px;
+  animation: slideInRight 0.3s ease;
+}
+.hex-toast.leaving{
+  animation: slideOutRight 0.3s ease;
 }

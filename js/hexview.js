@@ -1,4 +1,6 @@
 // Lightweight hex viewer with virtual scrolling for large files
+import { parseQuery, findAll, stepIndex, describeByte } from "./search.js";
+
 export class HexView {
   constructor(container){
     this.el = container;
@@ -17,11 +19,18 @@ export class HexView {
       end: null,
       isSelecting: false
     };
+
+    // 検索の状態。hits は見つかった位置の配列（昇順）、current は今いる番号
+    this.find = { length: 0, hits: [], current: -1, truncated: false };
     
     // Setup virtual scrolling container
     this.setupVirtualScrolling();
     this.setupContextMenu();
     this.setupSelection();
+    this.setupFind();
+
+    // 言語を変えたら、メニューの文言も作り直す
+    document.addEventListener("languagechange", () => this.rebuildContextMenu());
     
     // Initialize copy button states
     this.updateCopyButtonStates();
@@ -46,8 +55,9 @@ export class HexView {
   }
   
   setupContextMenu() {
-    // DISABLED: Context menu removed per user request - copy functionality is in toolbar
-    return;
+    // 以前はここで return しており、メニューはDOMにすら作られていなかった。
+    // それでいて右クリックは preventDefault で奪っていたため、
+    // ブラウザー標準のメニューも出ず、右クリックが何も返さない状態だった。
     
     // Create context menu element
     this.contextMenu = document.createElement('div');
@@ -116,11 +126,19 @@ export class HexView {
       }
     });
     
-    // Context menu disabled - prevent default right-click behavior
     this.el.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      // Context menu functionality removed - use toolbar buttons instead
+      this.showContextMenu(e.clientX, e.clientY, this.getOffsetFromEvent(e));
     });
+  }
+
+  /** 言語を変えたときに、メニューを作り直す */
+  rebuildContextMenu() {
+    if (this.contextMenu && this.contextMenu.parentNode) {
+      this.contextMenu.parentNode.removeChild(this.contextMenu);
+    }
+    this.contextMenu = null;
+    this.setupContextMenu();
   }
   
   setupSelection() {
@@ -349,25 +367,13 @@ export class HexView {
   showToast(message) {
     // Simple toast notification
     const toast = document.createElement('div');
-    toast.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: var(--card);
-      color: var(--fg);
-      padding: 12px 16px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 10001;
-      font-size: 14px;
-      max-width: 300px;
-      animation: slideInRight 0.3s ease;
-    `;
+    toast.className = 'hex-toast';
+    toast.setAttribute('role', 'status');
     toast.textContent = message;
     document.body.appendChild(toast);
     
     setTimeout(() => {
-      toast.style.animation = 'slideOutRight 0.3s ease';
+      toast.classList.add('leaving');
       setTimeout(() => toast.remove(), 300);
     }, 3000);
   }
@@ -506,9 +512,14 @@ export class HexView {
       let hexClass = 'hex-byte';
       let asciiClass = 'hex-ascii-char';
       
+      const foundClass = this.findStateAt(i);
       if (isSelected) {
         hexClass += ' hex-selected';
         asciiClass += ' hex-selected';
+      } else if (foundClass) {
+        // 検索の当たりは、シグネチャのヒットより手前に見せる
+        hexClass += ' ' + foundClass;
+        asciiClass += ' ' + foundClass;
       } else if (isHighlighted) {
         hexClass += ' hi';
         asciiClass += ' hi';
@@ -571,8 +582,10 @@ export class HexView {
   }
   
   showContextMenu(x, y, clickOffset = null) {
-    // DISABLED: Context menu functionality removed
-    return;
+    if (!this.contextMenu) return;
+
+    const hasSelection = this.selection.start !== null && this.selection.end !== null;
+    const copyItems = this.contextMenu.querySelectorAll('[data-action^="copy-"]');
     
     copyItems.forEach(item => {
       if (hasSelection) {
@@ -582,13 +595,11 @@ export class HexView {
       }
     });
     
-    // Update byte info if we have a specific offset
-    if (clickOffset !== null && this.view && clickOffset < this.view.length) {
-      const byteValue = this.view[clickOffset];
-      const infoItem = this.contextMenu.querySelector('#context-byte-info .info-detail');
-      if (infoItem) {
-        infoItem.textContent = `0x${byteValue.toString(16).toUpperCase().padStart(2, '0')} (${byteValue})`;
-      }
+    // 押した位置のバイトを、メニューの中に出す
+    this.lastClickOffset = (clickOffset !== null && this.view && clickOffset < this.view.length) ? clickOffset : null;
+    const infoItem = this.contextMenu.querySelector('#context-byte-info .info-detail');
+    if (infoItem) {
+      infoItem.textContent = this.lastClickOffset === null ? '' : ` — ${this.describeOffset(this.lastClickOffset)}`;
     }
     
     // Position and show menu
@@ -611,8 +622,7 @@ export class HexView {
   }
   
   hideContextMenu() {
-    // DISABLED: Context menu functionality removed
-    return;
+    if (this.contextMenu) this.contextMenu.classList.remove('show');
   }
   
   handleContextMenuAction(action) {
@@ -635,7 +645,117 @@ export class HexView {
       case 'jump-to-offset':
         this.showJumpDialog();
         break;
+      case 'find-pattern':
+        this.openFind();
+        break;
+      case 'show-info':
+        if (this.lastClickOffset !== null) this.showToast(this.describeOffset(this.lastClickOffset));
+        break;
     }
+  }
+
+  /** 1バイトを「0x4A／10進 74／2進 01001010／文字 J」の形で言う */
+  describeOffset(offset) {
+    const d = describeByte(this.view[offset]);
+    const charPart = d.char === null ? '' : I18n.t('find.byteChar', { char: d.char });
+    return I18n.t('find.byteInfo', { hex: d.hex, dec: d.dec, bin: d.bin, charPart });
+  }
+
+  /* ------------ 検索 ------------ */
+
+  setupFind() {
+    this.findEl = document.querySelector('#hexFind');
+    if (!this.findEl) return;
+    this.findInput = this.findEl.querySelector('#hexFindInput');
+    this.findMode = this.findEl.querySelector('#hexFindMode');
+    this.findCount = this.findEl.querySelector('#hexFindCount');
+
+    const run = () => this.runFind();
+    this.findInput.addEventListener('input', run);
+    this.findMode.addEventListener('change', run);
+    this.findEl.querySelector('#hexFindNext').addEventListener('click', () => this.stepFind(1));
+    this.findEl.querySelector('#hexFindPrev').addEventListener('click', () => this.stepFind(-1));
+    this.findEl.querySelector('#hexFindClose').addEventListener('click', () => this.closeFind());
+    const openBtn = document.querySelector('#hexFindOpen');
+    if (openBtn) openBtn.addEventListener('click', () => this.openFind());
+    this.findInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.stepFind(e.shiftKey ? -1 : 1); }
+      if (e.key === 'Escape') { e.preventDefault(); this.closeFind(); }
+    });
+    document.addEventListener('languagechange', () => { if (!this.findEl.hidden) this.runFind(); });
+  }
+
+  openFind() {
+    if (!this.findEl) return;
+    this.findEl.hidden = false;
+    this.findInput.focus();
+    this.findInput.select();
+    if (this.findInput.value) this.runFind();
+  }
+
+  closeFind() {
+    if (!this.findEl) return;
+    this.findEl.hidden = true;
+    this.find = { length: 0, hits: [], current: -1, truncated: false };
+    this.findCount.textContent = '';
+    this.findCount.classList.remove('warn');
+    this.renderVisible();
+  }
+
+  runFind() {
+    if (!this.findEl || !this.view) return;
+    const parsed = parseQuery(this.findInput.value, this.findMode.value);
+    if (parsed.error) {
+      this.find = { length: 0, hits: [], current: -1, truncated: false };
+      // 何も入れていないときに叱らない
+      this.findCount.textContent = parsed.error.key === 'find.empty' ? '' : I18n.t(parsed.error.key, parsed.error.params);
+      this.findCount.classList.toggle('warn', parsed.error.key !== 'find.empty');
+      this.renderVisible();
+      return;
+    }
+
+    const { hits, truncated } = findAll(this.view, parsed.bytes);
+    this.find = { length: parsed.bytes.length, hits, current: hits.length ? 0 : -1, truncated };
+    this.updateFindCount();
+    if (hits.length) this.scrollToOffset(hits[0]);
+    this.renderVisible();
+  }
+
+  stepFind(step) {
+    if (!this.find.hits.length) return;
+    this.find.current = stepIndex(this.find.hits.length, this.find.current, step);
+    this.updateFindCount();
+    this.scrollToOffset(this.find.hits[this.find.current]);
+    this.renderVisible();
+  }
+
+  updateFindCount() {
+    const { hits, current, truncated } = this.find;
+    if (!hits.length) {
+      this.findCount.textContent = I18n.t('find.none');
+      this.findCount.classList.add('warn');
+      return;
+    }
+    this.findCount.textContent = truncated
+      ? I18n.t('find.truncated', { total: hits.length })
+      : I18n.t('find.count', { index: current + 1, total: hits.length });
+    this.findCount.classList.toggle('warn', truncated);
+  }
+
+  /** offset が検索の当たりに入っているか。hits は昇順なので二分探索でよい */
+  findStateAt(offset) {
+    const { hits, length, current } = this.find;
+    if (!length || !hits.length) return null;
+    let lo = 0;
+    let hi = hits.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const start = hits[mid];
+      if (offset < start) hi = mid - 1;
+      else if (offset >= start + length) lo = mid + 1;
+      else return mid === current ? 'found-current' : 'found';
+    }
+    return null;
   }
   
   handleKeyDown(e) {
@@ -651,6 +771,9 @@ export class HexView {
       } else {
         this.copySelection('hex');
       }
+    } else if (ctrlKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      this.openFind();
     } else if (ctrlKey && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       this.selectAll();
