@@ -2,6 +2,7 @@ import { HexView } from "./hexview.js";
 import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
 import { findAppendedData, formatSize, appendedFileName, identifyStart } from "./appended.js";
 import { checkExtension } from "./extcheck.js";
+import { summarizeFile, toCsv } from "./batch.js";
 
 // 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
 const t = (key, params) => window.I18n.t(key, params);
@@ -24,6 +25,7 @@ let STATE = {
   hex: null,
   hits: [],
   selectedHitIndex: null, // -1 = no selection (show all), null = no hits, >=0 = specific hit
+  batch: [], // 一括チェックの結果
   theme: (localStorage.getItem("msi_theme") || "auto")
 };
 
@@ -41,6 +43,7 @@ async function init(){
     renderHits(STATE.hits);
     renderAppended();
     renderExtensionCheck();
+    renderBatch();
   });
 
   // Theme
@@ -58,6 +61,7 @@ async function init(){
 
   // Tabs
   qsa(".main-tab").forEach(btn=>btn.addEventListener("click", onTab));
+  setupBatch();
   setupTabKeyboard();
 
   // File open
@@ -340,6 +344,173 @@ function setupTabKeyboard(){
   document.addEventListener("msi:tabchanged", updateTabIndex);
 }
 
+
+/* ------------ 一括チェック ------------ */
+
+// 一度に扱う上限。carving の出力は数千件になることがあるが、
+// 画面に全部並べても読めないうえ、走査の時間もかかる
+const BATCH_LIMIT = 200;
+// 1件あたり、この大きさまでを読む。終端を見たいので先頭と末尾を取る
+const BATCH_HEAD = 4 * 1024 * 1024;
+
+function setupBatch(){
+  const input = qs("#batchInput");
+  const drop = qs("#batchDrop");
+  if (!input || !drop) return;
+
+  qs("#batchOpenBtn").addEventListener("click", () => input.click());
+  input.addEventListener("change", (e) => runBatch([...e.target.files]));
+  ;["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+  ;["dragleave","drop"].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    runBatch([...(e.dataTransfer?.files || [])]);
+  });
+  qs("#batchExportBtn").addEventListener("click", exportBatchCsv);
+  qs("#batchClearBtn").addEventListener("click", () => {
+    STATE.batch = [];
+    renderBatch();
+  });
+}
+
+/** 1ファイルを走査する。worker は使い捨てにして、途中で止まっても後を引かせない */
+function scanOneFile(segments, fileSize, entries){
+  return new Promise((resolve) => {
+    const worker = new Worker("js/worker.js");
+    const done = (value) => { worker.terminate(); resolve(value); };
+    worker.onmessage = (e) => {
+      if (e.data.type === "done") done({ hits: e.data.hits || [], trailerChecked: e.data.trailerChecked !== false });
+      if (e.data.type === "error") done({ hits: [], trailerChecked: false });
+    };
+    worker.onerror = () => done({ hits: [], trailerChecked: false });
+    worker.postMessage({ cmd: "scan", fileSize, segments, signatures: entries });
+  });
+}
+
+/** 大きなファイルでも、先頭と末尾だけを読む。終端の照合に末尾が要る */
+async function readBatchSegments(file){
+  if (file.size <= BATCH_HEAD * 2) {
+    return [{ buffer: await file.arrayBuffer(), base: 0 }];
+  }
+  const head = await file.slice(0, BATCH_HEAD).arrayBuffer();
+  const tailStart = file.size - BATCH_HEAD;
+  const tail = await file.slice(tailStart).arrayBuffer();
+  return [{ buffer: head, base: 0 }, { buffer: tail, base: tailStart }];
+}
+
+async function sha256Of(file){
+  if (!crypto?.subtle) return "";
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch (err) {
+    debugLog("sha256 failed", err);
+    return "";
+  }
+}
+
+/** 後ろに付いた部分の先頭だけを読んで、それが何かを見る */
+async function identifyAppendedInBatch(file, hits, trailerChecked){
+  const info = findAppendedData(hits, file.size, trailerChecked);
+  if (!info) return [];
+  const head = await file.slice(info.start, Math.min(info.start + 64, file.size)).arrayBuffer();
+  return identifyStart(new Uint8Array(head), STATE.dict.entries).map((g) => g.name);
+}
+
+async function runBatch(files){
+  if (!files.length) return;
+  const entries = STATE.dict.entries.filter((e) => e.enabled !== false && e.pattern && e.offset);
+  const targets = files.slice(0, BATCH_LIMIT);
+  if (files.length > BATCH_LIMIT) toast(t("batch.limit", { limit: BATCH_LIMIT }));
+
+  STATE.batch = [];
+  renderBatch();
+  const status = qs("#batchStatus");
+
+  for (let i = 0; i < targets.length; i += 1) {
+    const file = targets[i];
+    status.textContent = t("batch.running", { done: i, total: targets.length });
+    try {
+      const segments = await readBatchSegments(file);
+      const { hits, trailerChecked } = await scanOneFile(segments, file.size, entries);
+      const sha256 = file.size <= 64 * 1024 * 1024 ? await sha256Of(file) : "";
+      const appendedNames = await identifyAppendedInBatch(file, hits, trailerChecked);
+      STATE.batch.push(summarizeFile({ name: file.name, size: file.size, hits, trailerChecked, sha256, appendedNames }));
+    } catch (err) {
+      debugLog("batch read failed", err);
+      toast(t("batch.readError", { name: file.name }));
+    }
+    // 1件ごとに出す。全部終わるまで真っ白、を避ける
+    renderBatch(targets.length, i + 1);
+  }
+  renderBatch();
+}
+
+function batchTrailerCell(row){
+  const map = {
+    found: ["batch.trailer.found", "batch-flag-ok"],
+    missing: ["batch.trailer.missing", "batch-flag-ng"],
+    unchecked: ["batch.trailer.unchecked", "batch-flag-warn"],
+    none: ["batch.trailer.none", "muted"]
+  };
+  const [key, cls] = map[row.trailer] || map.none;
+  return el("td", {}, [el("span", { class: cls, text: t(key) })]);
+}
+
+function renderBatch(total, done){
+  const tbody = qs("#batchTbody");
+  const status = qs("#batchStatus");
+  if (!tbody) return;
+
+  const rows = STATE.batch || [];
+  tbody.replaceChildren(...rows.map((row) => {
+    const cells = [
+      el("td", { text: row.name }),
+      el("td", { class: "num", text: row.sizeText }),
+      el("td", {}, [el("span", row.formatText ? { text: row.formatText } : { class: "muted", text: t("batch.format.none") })]),
+      batchTrailerCell(row),
+      el("td", {}, [row.mismatch
+        ? el("span", { class: row.executable ? "batch-flag-ng" : "batch-flag-warn",
+                       text: t("batch.mismatch.ng", { extensions: row.mismatch.slice(0, 3).map((e) => "." + e).join(t("list.separator")) }) })
+        : el("span", { class: "batch-flag-ok", text: t("batch.mismatch.ok") })]),
+      el("td", { class: "num" }, [row.appendedBytes
+        ? el("span", { class: row.appendedNames.length ? "batch-flag-warn" : "muted", text: formatSize(row.appendedBytes) })
+        : el("span", { class: "muted", text: t("batch.appended.none") })]),
+      el("td", { class: "mono", text: row.sha256 })
+    ];
+    return el("tr", {}, cells);
+  }));
+
+  qs("#batchExportBtn").disabled = rows.length === 0;
+  qs("#batchClearBtn").disabled = rows.length === 0;
+  if (typeof total === "number") status.textContent = t("batch.running", { done, total });
+  else status.textContent = rows.length ? t("batch.done", { total: rows.length }) : t("batch.empty");
+}
+
+const BATCH_CSV_HEADERS = () => [
+  { label: t("batch.th.name"), value: (r) => r.name },
+  { label: t("batch.th.size"), value: (r) => r.size },
+  { label: t("batch.th.format"), value: (r) => r.formats.join("|") },
+  { label: t("batch.th.trailer"), value: (r) => r.trailer },
+  { label: t("batch.th.mismatch"), value: (r) => (r.mismatch ? r.mismatch.join("|") : "") },
+  { label: t("batch.th.appended"), value: (r) => r.appendedBytes },
+  { label: t("batch.th.sha256"), value: (r) => r.sha256 }
+];
+
+function exportBatchCsv(){
+  const rows = STATE.batch || [];
+  if (!rows.length) return;
+  // Excel が UTF-8 と分かるように BOM を付ける
+  const csv = "\ufeff" + toCsv(rows, BATCH_CSV_HEADERS());
+  const name = "magic-sign-inspector-batch.csv";
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(t("batch.exported", { total: rows.length, name }));
+}
 
 function onTab(e){
   qsa(".main-tab").forEach(b=>{
@@ -1065,15 +1236,20 @@ function renderAppended(){
   const head = new Uint8Array(STATE.buffer, info.start, Math.min(info.length, 64));
   const guessed = identifyStart(head, STATE.dict.entries).map((g) => g.name);
   const names = [...new Set([...guessed, ...info.inside.map((h) => h.name)].filter(Boolean))].slice(0, 5);
+  // 何も見つからないうちから⚠️を出すと、形式の終端構造の一部まで
+  // 「隠されている」ように読めてしまう（ZIPの終端記録で実際に起きた）
+  const suspicious = names.length > 0;
+  panel.classList.toggle("quiet", !suspicious);
   const children = [
-    el("strong", { class: "appended-heading", text: t("appended.heading") }),
+    el("strong", { class: "appended-heading",
+                   text: t(suspicious ? "appended.heading" : "appended.headingQuiet") }),
     el("p", { text: t("appended.body", {
       name: info.base.name || "-",
       end: info.start.toString(16).toUpperCase().padStart(8, "0"),
       size: formatSize(info.length)
     }) }),
-    el("p", { class: "muted small", text: names.length ? t("appended.inside", { names: names.join(t("list.separator")) }) : t("appended.nothing") }),
-    el("p", { class: "muted small", text: t("appended.hint") })
+    el("p", { class: "muted small", text: suspicious ? t("appended.inside", { names: names.join(t("list.separator")) }) : t("appended.nothing") }),
+    el("p", { class: "muted small", text: suspicious ? t("appended.hint") : t("appended.structural") })
   ];
 
   const jump = el("button", { class: "btn btn-sm", type: "button", text: t("appended.jump") });

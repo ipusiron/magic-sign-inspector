@@ -2474,3 +2474,58 @@ input[type="search"]{
   font-weight: 700;
 }
 :root.dark .ext-danger{ color: #f87171; }
+
+/* 一括チェック */
+.batch-drop{ min-height: 0; padding: 20px; }
+.batch-controls{
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+.batch-status{
+  flex: 1 1 200px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.batch-table-wrap{ overflow-x: auto; }
+.batch-table{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.batch-table th,
+.batch-table td{
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.batch-table th{
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  white-space: nowrap;
+}
+.batch-table td.mono{
+  font-family: var(--mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+.batch-table td.num{ text-align: right; white-space: nowrap; }
+.batch-flag-ng{ color: var(--danger); font-weight: 700; }
+.batch-flag-warn{ color: var(--warning-fg, #b3831f); font-weight: 700; }
+.batch-flag-ok{ color: #15803d; }
+:root.dark .batch-flag-ok{ color: #4ade80; }
+:root.dark .batch-flag-ng{ color: #f87171; }
+:root.dark .batch-flag-warn{ color: #fbbf24; }
+
+/* 後ろにデータがあるが、そこから何も見つからなかったとき。枠を目立たせない */
+.appended-panel.quiet{
+  border-color: var(--border);
+  background: var(--card);
+}
+.appended-panel.quiet .appended-heading{
+  color: var(--fg);
+}
