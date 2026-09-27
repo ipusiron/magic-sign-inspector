@@ -926,25 +926,34 @@ function startScan(){
   // Show loading state
   qs("#startScanBtn").classList.add("loading");
   
-  // Slice per scope (MVP: simple)
-  let buffer = STATE.buffer;
-  if (scope === "head64") buffer = STATE.buffer.slice(0, Math.min(64*1024*1024, STATE.buffer.byteLength));
-  if (scope === "head128") buffer = STATE.buffer.slice(0, Math.min(128*1024*1024, STATE.buffer.byteLength));
-  if (scope === "headTail") {
-    const h = STATE.buffer.slice(0, Math.min(64*1024*1024, STATE.buffer.byteLength));
-    const t = STATE.buffer.slice(Math.max(0, STATE.buffer.byteLength - 64*1024*1024));
-    // Combine for simplicity in MVP
-    const combined = new Uint8Array(h.byteLength + t.byteLength);
-    combined.set(new Uint8Array(h), 0);
-    combined.set(new Uint8Array(t), h.byteLength);
-    buffer = combined.buffer;
+  // 走査する区間を決める。区間ごとに実座標（base）を持たせるので、
+  // 末尾側のヒットもファイルの実座標のまま報告できる。
+  // 以前は先頭と末尾を1本に連結していたため、末尾側の位置がずれていた。
+  const HEAD_64 = 64 * 1024 * 1024;
+  const HEAD_128 = 128 * 1024 * 1024;
+  const total = STATE.buffer.byteLength;
+
+  let segments;
+  if (scope === "head64") {
+    segments = [{ buffer: STATE.buffer.slice(0, Math.min(HEAD_64, total)), base: 0 }];
+  } else if (scope === "head128") {
+    segments = [{ buffer: STATE.buffer.slice(0, Math.min(HEAD_128, total)), base: 0 }];
+  } else if (scope === "headTail") {
+    const headLen = Math.min(HEAD_64, total);
+    const tailStart = Math.max(headLen, total - HEAD_64);
+    segments = [{ buffer: STATE.buffer.slice(0, headLen), base: 0 }];
+    if (tailStart < total) {
+      segments.push({ buffer: STATE.buffer.slice(tailStart), base: tailStart });
+    }
+  } else {
+    segments = [{ buffer: STATE.buffer, base: 0 }];
   }
 
   // Start worker
   STATE.worker = new Worker("js/worker.js");
   STATE.worker.onmessage = onScanMessage;
-  STATE.worker.postMessage({cmd:"scan", buffer, signatures:entries, options:{}});
-  
+  STATE.worker.postMessage({ cmd: "scan", fileSize: total, segments, signatures: entries });
+
   qs("#startScanBtn").disabled = true;
   qs("#cancelScanBtn").disabled = false;
   qs("#progressWrap").hidden = false;
@@ -970,6 +979,8 @@ function onScanMessage(e){
   }
   if (type === "done"){
     STATE.hits = hits || [];
+    STATE.scanSkipped = e.data.skipped || null;
+    STATE.trailerChecked = e.data.trailerChecked !== false;
     console.log('Received hits from worker:', STATE.hits);
     renderHits(STATE.hits);
     
@@ -982,6 +993,7 @@ function onScanMessage(e){
     setTimeout(() => {
       cancelScan();
       toast(`スキャン完了: ${STATE.hits.length} 件のヒット`);
+      reportSkipped(STATE.scanSkipped, STATE.trailerChecked);
       
       // Flash hit count if there are hits
       if (STATE.hits.length > 0) {
@@ -1068,10 +1080,31 @@ function generateHitNote(signatureName, offset, confidence) {
   return `${offsetText}でのシグネチャ検出`;
 }
 
+/**
+ * 走査で落としたものを黙って捨てず、件数と理由を伝える。
+ * 末尾を見られない範囲の走査では、トレーラーを要求するシグネチャを
+ * ヒットさせないので、その旨も伝える。
+ */
+function reportSkipped(skipped, trailerChecked){
+  if (!skipped) return;
+  const messages = [];
+  if (!trailerChecked && skipped.trailerUnverifiable > 0) {
+    messages.push(`末尾を見ない範囲の走査のため、終端の並びを確かめるシグネチャ${skipped.trailerUnverifiable}件は判定していません`);
+  }
+  if (skipped.outOfSize > 0) {
+    messages.push(`大きさの条件に合わないシグネチャ${skipped.outOfSize}件を除きました`);
+  }
+  const invalid = skipped.invalidPattern || [];
+  if (invalid.length > 0) {
+    messages.push(`パターンを読めないシグネチャ${invalid.length}件を飛ばしました（例: ${invalid[0].name}）`);
+  }
+  for (const message of messages) toast(message);
+}
+
 function renderHits(hits){
   const tbody = qs("#hitsTbody");
   if (!hits.length){
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">ヒットなし</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">ヒットなし</td></tr>`;
     STATE.hex.setHighlights([]);
     STATE.selectedHitIndex = null;
     return;
@@ -1095,12 +1128,24 @@ function renderHits(hits){
     const selectedClass = isSelected ? ' class="selected"' : '';
     
     const noteText = h.notes || generateHitNote(h.name, h.offset, h.confidence);
+
+    // 終端の並びを照合した結果。
+    // 「あるはずの終端が見つからない」ことこそ、壊れたファイルの手がかりになる
+    const trailerLabels = {
+      found: "✅ あり",
+      missing: "⚠️ 見つからない",
+      unchecked: "－ 未照合",
+      none: "－"
+    };
+    const trailerLabel = trailerLabels[h.trailerState] || "－";
+    const trailerClass = h.trailerState === "missing" ? "trailer-missing" : "";
     
     return `<tr data-index="${i}"${selectedClass}>
       <td>${escapeHtml(h.name||"")}</td>
       <td>${offsetDisplay}</td>
       <td>${h.length||"-"}</td>
       <td>${h.confidence||"-"}</td>
+      <td class="hit-trailer ${trailerClass}">${escapeHtml(trailerLabel)}</td>
       <td class="hit-note">${escapeHtml(noteText)}</td>
     </tr>`;
   }).join("");

@@ -2176,3 +2176,13 @@ footer{
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* 終端の照合結果。見つからないときだけ目立たせる */
+.hit-trailer{
+  white-space: nowrap;
+}
+
+.hit-trailer.trailer-missing{
+  color: var(--warning-fg, #b3831f);
+  font-weight: 700;
+}
