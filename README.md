@@ -8,8 +8,8 @@ title: "MagicSign Inspector"
 subtitle_ja: "ファイルシグネチャ（マジックナンバー）可視化・検証ツール"
 subtitle_en: "File Signature (Magic Number) Visualization and Verification Tool"
 
-description_ja: "ファイルのマジックナンバー（シグネチャ）を可視化・編集・検証できる軽量フォレンジック補助ツール。244種類のシグネチャ対応、HEXビュー、ハッシュ計算、foremost.conf出力など。"
-description_en: "A lightweight forensic assistance tool for visualizing, editing, and verifying file magic numbers (signatures). Supports 244 signatures, HEX view, hash calculation, and foremost.conf export."
+description_ja: "ファイルのマジックナンバー（シグネチャ）を可視化・編集・検証できる軽量フォレンジック補助ツール。184件のシグネチャを収録し、HEXビュー、ハッシュ計算、終端の照合、foremost.conf出力に対応。日英表示。"
+description_en: "A lightweight forensic assistance tool for viewing, editing and testing file magic numbers (signatures). Ships 184 signatures, with a hex view, hashes, trailer checking and foremost.conf export. Japanese and English."
 
 category_ja:
   - フォレンジック
@@ -37,6 +37,8 @@ hub: true
 
 # MagicSign Inspector - ファイルシグネチャ（マジックナンバー）可視化・検証ツール
 
+[English](README.en.md) · 日本語
+
 ![GitHub Repo stars](https://img.shields.io/github/stars/ipusiron/magic-sign-inspector?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/ipusiron/magic-sign-inspector?style=social)
 ![GitHub last commit](https://img.shields.io/github/last-commit/ipusiron/magic-sign-inspector)
@@ -60,9 +62,13 @@ hub: true
 
 ## 📸 スクリーンショット
 
-> ![JPEGファイルを検査](assets/screenshot.png)  
+> ![JPEGを検査し、終端まで揃っている状態](assets/screenshot.png)
 >
-> *JPEGファイルを検査*
+> *完全なJPEG。終端の列がすべて「あり」になっている*
+
+> ![途中で切れたJPEG。終端が見つからない](assets/screenshot-truncated.png)
+>
+> *同じファイルの末尾を落としたもの。終端が「見つからない」になり、JPEG (Complete) も消える*
 
 ---
 
@@ -130,13 +136,14 @@ hub: true
 foremost -c custom_foremost.conf -i suspect_hdd.img -o recovered/
 ```
 
-4. **結果検証**: 抽出された数百ファイルをMagicSign Inspectorで一括チェック
-   - ただし、現バージョンの本ツールでは一括チェック機能はない。
-   - 正常なJPEG: ヒット率100%、ファイルサイズと整合性確認
-   - 偽陽性: シグネチャはヒットするがファイルとして不完全なデータを特定・除外
-5. **精度向上**: 誤検知率を30%→5%に削減、証拠ファイルの信頼性向上
+4. **結果検証**: 抽出されたファイルを1つずつ本ツールに読ませて確かめる
+   - 一括で確かめる機能は、現時点ではない。
+   - 先頭のシグネチャだけでなく、終端（トレーラー）の列も見る。JPEGなら `FF D9` が無いものは途中で切れている
+   - シグネチャはヒットするがファイルとして不完全なものを、この差で見分けられる
 
-**成果**: 捜査時間の短縮、法廷で使用可能な高信頼性データの確保、再現可能な検証プロセスの確立
+**成果**: どのファイルが完全でどれが途中で切れているかを、抽出結果の一覧に対して同じ手順で確かめられる
+
+※ この節は使い方の例であり、削減率などの数値はここでは示しません。実際の効果は対象のデータに依ります。
 
 ---
 
@@ -153,16 +160,25 @@ magic-sign-inspector/
 │   ├── favicon.svg             # ファビコン（FFD8デザイン）
 │   ├── logo.svg                # アプリロゴ
 │   └── screenshot.png          # デモ用スクリーンショット
+├── package.json                 # テストの実行定義（依存パッケージなし）
 ├── js/                         # JavaScriptモジュール
-│   ├── app.js                  # メインアプリケーション（1,412行）
+│   ├── app.js                  # メインアプリケーション
+│   ├── i18n.js                 # 日本語・英語の文言（UI側は文字列を持たない）
+│   ├── dict.js                 # 辞書の検証・foremost.conf の読み書き（DOMに触れない）
 │   ├── fileinfo.js             # ファイル情報・ハッシュ・Exif連携
 │   ├── hexview.js              # HEXビューア（仮想スクロール対応）
-│   └── worker.js               # WebWorker（大容量ファイル処理）
-└── sigs/                       # シグネチャ辞書
-    ├── default.json            # 基本マジックナンバー（91種）
-    ├── enhanced.json           # 拡張画像・アーカイブ形式（88種）
-    ├── forensics.json          # フォレンジック特化形式（40種）
-    └── trailers.json           # 終端シグネチャ（25種）
+│   ├── shortcuts.js            # キーボード操作
+│   └── worker.js               # WebWorker（走査の本体）
+├── sigs/                       # シグネチャ辞書（合計184件）
+│   ├── default.json            # 基本マジックナンバー（54件）
+│   ├── enhanced.json           # 拡張画像・アーカイブ形式（67件）
+│   ├── forensics.json          # フォレンジック特化形式（40件）
+│   └── trailers.json           # 終端シグネチャ（23件）
+└── test/                       # node --test で動く（依存パッケージなし）
+    ├── scan.test.js            # 走査・終端の照合・相対オフセット
+    ├── dict.test.js            # 辞書の検証
+    ├── foremost.test.js        # foremost.conf の読み書き
+    └── i18n.test.js            # 辞書の欠けを拾う
 ```
 
 ---
@@ -172,7 +188,8 @@ magic-sign-inspector/
 ### 🎯 主な機能
 
 #### ファイル解析機能
-- **244種類のシグネチャ対応** - JPEG/PNG/ZIP/PDF/EXE等の豊富な形式
+- **184件のシグネチャを収録** - JPEG/PNG/ZIP/PDF/EXE等（既定で有効なのは181件。画像29・アーカイブ26・文書20・音声17・動画14・その他78）
+- **終端（トレーラー）の照合** - 26件は終端の並びも持ち、「先頭はあるのに終端が無い」壊れたファイルを見分けられる
 - **ドラッグ&ドロップ解析** - 直感的なファイル読み込み
 - **大容量ファイル対応** - 50MB+でもスムーズな処理（チャンク読み込み）
 - **リアルタイムHEXビュー** - 仮想スクロールによる高速表示
@@ -196,13 +213,15 @@ magic-sign-inspector/
 - **レスポンシブUI** - PC・タブレット・スマートフォン対応
 - **キーボードショートカット** - HEXビューでのCtrl+C/A等
 - **プライバシー重視** - 完全ローカル処理、外部送信なし
+- **日本語・英語の切り替え** - ヘッダーのボタン、`?lang=en`、ブラウザーの言語設定のいずれでも切り替わる
 
 ### 🔮 技術的特徴
 - **トレーラー（終端）パターン対応** - ファイル終端の検証
 - **相対オフセット検索** - 特定位置からの距離指定
 - **WebWorker活用** - UIをブロックしない非同期処理
 - **仮想スクロール** - 大容量ファイルでもメモリ効率的
-- **パフォーマンス最適化** - GPU加速、CSS containment活用
+- **CSS containment** - 大きな表とHEXビューの再描画範囲を狭める
+- **Content-Security-Policy** - `default-src 'none'` を基点に、自分のファイルだけを読み込む。インラインのスクリプトとスタイルは使わない
 
 ---
 
@@ -345,6 +364,9 @@ npx serve -l 5500
 ### 🔧 開発者向け情報
 - **[TECHNICAL.md](TECHNICAL.md)** - 技術仕様・アーキテクチャ・パフォーマンス最適化
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - 開発メモ・トラブルシューティング・今後の方針
+
+### 🌐 英語版
+- **[README.en.md](README.en.md)** - English README
 
 ### 🎯 プロジェクト管理
 - **[CLAUDE.md](CLAUDE.md)** - AI開発支援設定・コンテキスト情報

@@ -2356,3 +2356,44 @@ input[type="search"]{
   padding: 6px 12px;
   white-space: nowrap;
 }
+
+/* HEXビューのツールバー。1440pxの画面でもボタンの文字が折り返していた。
+   縮まない要素にはそれを伝え、伸びるのはジャンプ欄だけにする */
+.hex-toolbar{
+  flex-wrap: wrap;
+}
+.hex-toolbar .btn,
+.hex-toolbar > label > span{
+  white-space: nowrap;
+}
+.hex-toolbar #jumpPrev,
+.hex-toolbar #jumpNext,
+.hex-toolbar #jumpGo,
+.hex-toolbar .hex-copy-buttons,
+.hex-toolbar > label:not(.grow){
+  flex: 0 0 auto;
+}
+.hex-toolbar .grow{
+  flex: 1 1 220px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* HEX行がビューの幅を超え、ASCII欄が隠れていた。
+   16進の欄は中身のぶんだけ取り、余りをASCII欄に回す */
+.hex-data{
+  min-width: 0;
+  width: max-content;
+  flex: 0 0 auto;
+}
+.hex-ascii{
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+@media (min-width: 1201px){
+  /* HEXビューの側を広くする。ヒット一覧は6列で足りる */
+  .inspect-grid{ grid-template-columns: 1fr 1.6fr; }
+}
