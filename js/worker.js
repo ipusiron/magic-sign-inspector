@@ -175,7 +175,9 @@ function matchAt(view, c, pos, base, hits, context) {
     confidence: c.confidence || 80,
     notes: "",
     trailerOffset,
-    trailerState
+    trailerState,
+    // 終端がどこで終わるか。後ろに何か付いているかの判定に使う
+    trailerLength: c.trailerParts ? c.trailerParts.length : 0
   });
   return true;
 }
@@ -185,7 +187,10 @@ function matchAt(view, c, pos, base, hits, context) {
  * 末尾ぴったりにあるのがふつうだが、パディングが付く形式もあるので
  * 少しだけ遡って探し、見つかった実座標を返す。
  */
-const TRAILER_SEARCH_WINDOW = 64;
+// 末尾から遡って終端を探す幅。64バイトでは、画像の後ろに書庫を繋いだファイルで
+// 終端を見失う（繋いだぶんだけ後ろにずれるため）。後ろに何か付いていること自体を
+// 見つけたいので、64KBまで遡る。巨大なファイルでも、この幅なら一瞬で終わる。
+const TRAILER_SEARCH_WINDOW = 64 * 1024;
 
 function findTrailer(segment, parts) {
   const view = segment.view;
@@ -265,7 +270,9 @@ function finalizeScan(hits, context, invalid) {
     confidence: h.confidence,
     notes: h.notes,
     trailerOffset: typeof h.trailerOffset === "number" ? h.trailerOffset : null,
-    trailerState: h.trailerState || "none"
+    trailerState: h.trailerState || "none",
+    // ここで項目を挙げ直しているので、hits に足したものはここにも足すこと
+    trailerLength: typeof h.trailerLength === "number" ? h.trailerLength : 0
   }));
 
   self.postMessage({ type: "progress", progress: 100 });

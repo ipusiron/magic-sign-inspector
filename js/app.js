@@ -1,5 +1,6 @@
 import { HexView } from "./hexview.js";
 import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
+import { findAppendedData, formatSize, appendedFileName, identifyStart } from "./appended.js";
 
 // 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
 const t = (key, params) => window.I18n.t(key, params);
@@ -37,6 +38,7 @@ async function init(){
   document.addEventListener("languagechange", () => {
     renderSigTable();
     renderHits(STATE.hits);
+    renderAppended();
   });
 
   // Theme
@@ -711,6 +713,7 @@ async function openFile(file){
     // Clear previous state first
     STATE.hits = [];
     renderHits([]);
+    renderAppended();
     setProgress(100, t("toast.readDone"));
     
     // Progressive HEX view initialization based on file size
@@ -919,6 +922,7 @@ function onScanMessage(e){
     
     // Update file info with scan results
     updateFileInfoWithScanResults(STATE.hits);
+    renderAppended();
     
     // Show completion animation
     setProgress(100, t("toast.scanDone", { count: STATE.hits.length }));
@@ -1037,6 +1041,59 @@ function reportSkipped(skipped, trailerChecked){
     messages.push(t("toast.skipInvalid", { count: invalid.length, name: invalid[0].name }));
   }
   for (const message of messages) toast(message);
+}
+
+/**
+ * ファイルの終端より後ろに何か付いていれば、それを伝える。
+ * 画像の後ろに書庫を繋ぐ隠し方は、開いても見た目に出ない。
+ */
+function renderAppended(){
+  const panel = qs("#appendedPanel");
+  if (!panel) return;
+  const info = findAppendedData(STATE.hits, STATE.buffer ? STATE.buffer.byteLength : 0, STATE.trailerChecked);
+  STATE.appended = info;
+
+  if (!info) { panel.hidden = true; panel.replaceChildren(); return; }
+
+  // 走査で見つかったものに加えて、後ろの部分を1つのファイルとみなして先頭も照合する。
+  // 既定の辞書はほとんどが「ファイル先頭から0バイト目」の指定なので、
+  // これをやらないと、繋がれた側が何なのかを言えない
+  const head = new Uint8Array(STATE.buffer, info.start, Math.min(info.length, 64));
+  const guessed = identifyStart(head, STATE.dict.entries).map((g) => g.name);
+  const names = [...new Set([...guessed, ...info.inside.map((h) => h.name)].filter(Boolean))].slice(0, 5);
+  const children = [
+    el("strong", { class: "appended-heading", text: t("appended.heading") }),
+    el("p", { text: t("appended.body", {
+      name: info.base.name || "-",
+      end: info.start.toString(16).toUpperCase().padStart(8, "0"),
+      size: formatSize(info.length)
+    }) }),
+    el("p", { class: "muted small", text: names.length ? t("appended.inside", { names: names.join(t("list.separator")) }) : t("appended.nothing") }),
+    el("p", { class: "muted small", text: t("appended.hint") })
+  ];
+
+  const jump = el("button", { class: "btn btn-sm", type: "button", text: t("appended.jump") });
+  jump.addEventListener("click", () => STATE.hex.scrollToOffset(info.start));
+  const save = el("button", { class: "btn btn-sm primary", type: "button", text: t("appended.save") });
+  save.addEventListener("click", () => saveAppended(info));
+  children.push(el("div", { class: "appended-actions" }, [jump, save]));
+
+  panel.replaceChildren(...children);
+  panel.hidden = false;
+}
+
+/** 後ろに付いた部分だけを切り出して保存する */
+function saveAppended(info){
+  if (!STATE.buffer) return;
+  const part = STATE.buffer.slice(info.start, info.start + info.length);
+  const name = appendedFileName(STATE.file ? STATE.file.name : "file", info.start);
+  const url = URL.createObjectURL(new Blob([part], { type: "application/octet-stream" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(t("appended.saved", { size: formatSize(info.length), name }));
 }
 
 function renderHits(hits){

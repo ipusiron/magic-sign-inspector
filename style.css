@@ -2440,3 +2440,30 @@ input[type="search"]{
 .hex-toast.leaving{
   animation: slideOutRight 0.3s ease;
 }
+
+/* 終端の後ろに付いたデータの知らせ */
+.appended-panel{
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--warning-fg, #b3831f);
+  border-radius: 10px;
+  background: var(--warning-bg, #fff8e6);
+}
+.appended-panel[hidden]{ display: none; }
+.appended-panel p{ margin: 6px 0; }
+.appended-heading{
+  color: var(--warning-fg, #b3831f);
+  display: block;
+  margin-bottom: 4px;
+}
+.appended-actions{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+:root.dark .appended-panel{
+  background: #2a2010;
+  border-color: #b45309;
+}
+:root.dark .appended-heading{ color: #fbbf24; }
