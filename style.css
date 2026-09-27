@@ -2349,3 +2349,10 @@ input[type="search"]{
   max-width: 100%;
   box-sizing: border-box;
 }
+
+/* 言語の切り替え。テーマの切り替えと同じ高さにそろえる */
+.lang-toggle{
+  min-height: 36px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}

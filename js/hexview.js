@@ -55,45 +55,45 @@ export class HexView {
     this.contextMenu.innerHTML = `
       <div class="hex-context-menu-item" data-action="copy-hex">
         <span class="icon">🔖</span>
-        <span>16進数をコピー</span>
+        <span>${I18n.t("hex.menu.copyHex")}</span>
         <span class="shortcut">Ctrl+C</span>
       </div>
       <div class="hex-context-menu-item" data-action="copy-ascii">
         <span class="icon">📝</span>
-        <span>ASCIIをコピー</span>
+        <span>${I18n.t("hex.menu.copyAscii")}</span>
         <span class="shortcut">Ctrl+Shift+C</span>
       </div>
       <div class="hex-context-menu-item" data-action="copy-bytes">
         <span class="icon">⚡</span>
-        <span>生バイトをコピー</span>
+        <span>${I18n.t("hex.menu.copyRaw")}</span>
         <span class="shortcut">Ctrl+Alt+C</span>
       </div>
       <div class="hex-context-menu-separator"></div>
       <div class="hex-context-menu-item" data-action="select-all">
         <span class="icon">🎯</span>
-        <span>すべて選択</span>
+        <span>${I18n.t("hex.menu.selectAll")}</span>
         <span class="shortcut">Ctrl+A</span>
       </div>
       <div class="hex-context-menu-item" data-action="select-none">
         <span class="icon">⭕</span>
-        <span>選択解除</span>
+        <span>${I18n.t("hex.menu.selectNone")}</span>
         <span class="shortcut">Esc</span>
       </div>
       <div class="hex-context-menu-separator"></div>
       <div class="hex-context-menu-item" data-action="jump-to-offset">
         <span class="icon">🎯</span>
-        <span>オフセットへジャンプ...</span>
+        <span>${I18n.t("hex.menu.jump")}</span>
         <span class="shortcut">Ctrl+G</span>
       </div>
       <div class="hex-context-menu-item" data-action="find-pattern">
         <span class="icon">🔍</span>
-        <span>パターンを検索...</span>
+        <span>${I18n.t("hex.menu.find")}</span>
         <span class="shortcut">Ctrl+F</span>
       </div>
       <div class="hex-context-menu-separator"></div>
       <div class="hex-context-menu-item" data-action="show-info" id="context-byte-info">
         <span class="icon">ℹ️</span>
-        <span>バイト情報</span>
+        <span>${I18n.t("hex.menu.byteInfo")}</span>
         <span class="info-detail"></span>
       </div>
     `;
@@ -264,7 +264,7 @@ export class HexView {
   
   copySelection(format) {
     if (this.selection.start === null || this.selection.end === null) {
-      this.showToast('選択範囲がありません');
+      this.showToast(I18n.t('hex.noSelection'));
       return;
     }
     
@@ -273,7 +273,7 @@ export class HexView {
     const length = end - start + 1;
     
     if (length > 10000) {
-      if (!confirm(`${length.toLocaleString()} バイトをコピーしますか？`)) {
+      if (!confirm(I18n.t('hex.confirmCopy', { bytes: length.toLocaleString() }))) {
         return;
       }
     }
@@ -305,10 +305,10 @@ export class HexView {
     }
     
     navigator.clipboard.writeText(content).then(() => {
-      this.showToast(`${format.toUpperCase()}形式で ${length} バイトをコピーしました`);
+      this.showToast(I18n.t('hex.copied', { format: format.toUpperCase(), bytes: length }));
     }).catch(err => {
       console.error('Copy failed:', err);
-      this.showToast('コピーに失敗しました');
+      this.showToast(I18n.t('hex.copyFailed'));
     });
   }
   
@@ -318,7 +318,7 @@ export class HexView {
     this.selection.start = 0;
     this.selection.end = this.view.length - 1;
     this.updateSelection();
-    this.showToast(`${this.view.length.toLocaleString()} バイトを選択しました`);
+    this.showToast(I18n.t('hex.selected', { bytes: this.view.length.toLocaleString() }));
   }
   
   clearSelection() {
@@ -328,7 +328,7 @@ export class HexView {
   }
   
   showJumpDialog() {
-    const offset = prompt('ジャンプ先オフセット (10進数または0x16進数):');
+    const offset = prompt(I18n.t('hex.jumpPrompt'));
     if (!offset) return;
     
     let targetOffset = 0;
@@ -339,7 +339,7 @@ export class HexView {
     }
     
     if (isNaN(targetOffset) || targetOffset < 0 || targetOffset >= this.view.length) {
-      alert('無効なオフセットです');
+      alert(I18n.t('hex.badOffset'));
       return;
     }
     
@@ -481,7 +481,7 @@ export class HexView {
       font-size: 14px;
       color: var(--fg);
     `;
-    loadingDiv.textContent = 'HEXビューを準備中...';
+    loadingDiv.textContent = I18n.t('hex.preparing');
     this.el.appendChild(loadingDiv);
   }
   

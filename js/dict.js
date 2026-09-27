@@ -12,23 +12,23 @@
 const PATTERN_TOKEN_RE = /^(\?\?|[0-9A-Fa-f]{2}|\[[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}\])$/;
 
 export function validateEntry(raw, index) {
-  const where = `${index + 1}件目`;
-  if (!raw || typeof raw !== "object") return { error: `${where}: 形が正しくありません` };
+  const n = index + 1;
+  if (!raw || typeof raw !== "object") return { error: { key: "dict.badShape", params: { n } } };
 
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
-  if (!name) return { error: `${where}: 名前がありません` };
+  if (!name) return { error: { key: "dict.noName", params: { n } } };
 
   const pattern = typeof raw.pattern === "string" ? raw.pattern.trim() : "";
-  if (!pattern) return { error: `${where}（${name}）: パターンがありません` };
+  if (!pattern) return { error: { key: "dict.noPattern", params: { n, name } } };
   const tokens = pattern.split(/\s+/);
   const badToken = tokens.find((t) => !PATTERN_TOKEN_RE.test(t));
-  if (badToken) return { error: `${where}（${name}）: 読めないトークン ${badToken}` };
+  if (badToken) return { error: { key: "dict.badToken", params: { n, name, token: badToken } } };
 
   const offsetType = raw.offset?.type === "relative" ? "relative" : "absolute";
   const offset = { type: offsetType };
   if (offsetType === "absolute") {
     const value = Number(raw.offset?.value ?? 0);
-    if (!Number.isFinite(value) || value < 0) return { error: `${where}（${name}）: オフセットが正しくありません` };
+    if (!Number.isFinite(value) || value < 0) return { error: { key: "dict.badOffset", params: { n, name } } };
     offset.value = value;
   } else {
     if (typeof raw.offset?.from === "string" && raw.offset.from.trim()) offset.from = raw.offset.from.trim();
@@ -38,7 +38,7 @@ export function validateEntry(raw, index) {
 
   const confidence = Number(raw.confidence ?? 80);
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) {
-    return { error: `${where}（${name}）: 信頼度は0〜100で指定してください` };
+    return { error: { key: "dict.badConfidence", params: { n, name } } };
   }
 
   const entry = {
@@ -91,7 +91,7 @@ export function validateEntries(list) {
  */
 export function toForemostBytes(pattern) {
   const tokens = (pattern || "").trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return { error: "パターンが空です" };
+  if (tokens.length === 0) return { error: { key: "dict.emptyPattern", params: {} } };
 
   const parts = [];
   for (const token of tokens) {
@@ -100,7 +100,7 @@ export function toForemostBytes(pattern) {
     } else if (/^[0-9A-Fa-f]{2}$/.test(token)) {
       parts.push(`\\x${token.toLowerCase()}`);
     } else {
-      return { error: `foremost では扱えない書き方です: ${token}` };
+      return { error: { key: "foremost.unsupported", params: { token } } };
     }
   }
   return { value: parts.join("") };
@@ -133,14 +133,14 @@ export function parseForemostConf(text) {
 
     const cols = line.split(/\s+/);
     if (cols.length < 4) {
-      errors.push(`${index + 1}行目: 列が足りません`);
+      errors.push({ key: "dict.fewColumns", params: { n: index + 1 } });
       return;
     }
 
     const [ext, , sizeText, headerText, footerText] = cols;
     const pattern = fromForemost(headerText);
     if (!pattern) {
-      errors.push(`${index + 1}行目（${ext}）: ヘッダーを読めません`);
+      errors.push({ key: "dict.badHeader", params: { n: index + 1, ext } });
       return;
     }
 

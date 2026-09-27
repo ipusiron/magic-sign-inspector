@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { validateEntry, validateEntries } from "../js/dict.js";
-import { read } from "./helper.js";
+import { read, loadI18n, render } from "./helper.js";
+
+const I18n = loadI18n();
 
 const base = { name: "Sample", pattern: "FF D8", offset: { type: "absolute", value: 0 } };
 
@@ -17,16 +19,20 @@ test("正しいエントリは通る", () => {
 });
 
 test("名前かパターンがなければ落とす", () => {
-  assert.match(validateEntry({ pattern: "FF" }, 0).error, /名前/);
-  assert.match(validateEntry({ name: "x" }, 0).error, /パターン/);
-  assert.match(validateEntry({ name: "x", pattern: "   " }, 0).error, /パターン/);
+  assert.equal(validateEntry({ pattern: "FF" }, 0).error.key, "dict.noName");
+  assert.equal(validateEntry({ name: "x" }, 0).error.key, "dict.noPattern");
+  assert.equal(validateEntry({ name: "x", pattern: "   " }, 0).error.key, "dict.noPattern");
 });
 
 test("読めないパターンは、名前を添えて落とす", () => {
   const { error } = validateEntry({ ...base, pattern: "FF ZZ" }, 3);
-  assert.match(error, /4件目/);
-  assert.match(error, /Sample/);
-  assert.match(error, /ZZ/);
+  assert.equal(error.key, "dict.badToken");
+  assert.deepEqual(error.params, { n: 4, name: "Sample", token: "ZZ" });
+  // 訳した文にも、どれが悪いのかが残っていること
+  const text = render(error, I18n);
+  assert.match(text, /4件目/);
+  assert.match(text, /Sample/);
+  assert.match(text, /ZZ/);
 });
 
 test("パターンのトークンは3種類だけを認める", () => {
@@ -39,9 +45,9 @@ test("パターンのトークンは3種類だけを認める", () => {
 });
 
 test("信頼度とオフセットの範囲を見る", () => {
-  assert.match(validateEntry({ ...base, confidence: 500 }, 0).error, /信頼度/);
-  assert.match(validateEntry({ ...base, confidence: -1 }, 0).error, /信頼度/);
-  assert.match(validateEntry({ ...base, offset: { type: "absolute", value: -5 } }, 0).error, /オフセット/);
+  assert.equal(validateEntry({ ...base, confidence: 500 }, 0).error.key, "dict.badConfidence");
+  assert.equal(validateEntry({ ...base, confidence: -1 }, 0).error.key, "dict.badConfidence");
+  assert.equal(validateEntry({ ...base, offset: { type: "absolute", value: -5 } }, 0).error.key, "dict.badOffset");
 });
 
 test("知らない項目は持ち越さない", () => {

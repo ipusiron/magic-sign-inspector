@@ -35,7 +35,8 @@ self.addEventListener("message", async (e) => {
         compiled.push(compileSig(sig));
       } catch (err) {
         // 1件の書式違いで走査全体を止めない
-        invalid.push({ name: sig.name || sig.id || "(no name)", reason: String(err && err.message || err) });
+        // 文言は持たず、理由をキーで返す。訳すのは表示側（app.js の describeIssue）
+        invalid.push({ name: sig.name || sig.id || "(no name)", issue: err && err.issue, reason: String(err && err.message || err) });
       }
     }
 
@@ -74,13 +75,13 @@ self.addEventListener("message", async (e) => {
 /** "FF ?? [00-1F]" のような並びを、照合できる形にする */
 function compileParts(pattern) {
   const toks = (pattern || "").trim().split(/\s+/).filter(Boolean);
-  if (toks.length === 0) throw new Error("パターンが空です");
+  if (toks.length === 0) throw Object.assign(new Error("empty pattern"), { issue: { key: "worker.emptyPattern", params: {} } });
   return toks.map((tok) => {
     if (/^\?\?$/.test(tok)) return { kind: "any" };
     const mRange = tok.match(/^\[([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})\]$/);
     if (mRange) return { kind: "range", lo: parseInt(mRange[1], 16), hi: parseInt(mRange[2], 16) };
     if (/^[0-9A-Fa-f]{2}$/.test(tok)) return { kind: "byte", val: parseInt(tok, 16) };
-    throw new Error(`扱えないトークンです: ${tok}`);
+    throw Object.assign(new Error("unsupported token: " + tok), { issue: { key: "worker.badToken", params: { token: tok } } });
   });
 }
 

@@ -36,6 +36,20 @@ export function loadWorker() {
   };
 }
 
+/**
+ * i18n.js は通常のスクリプトなので、Node からは関数として読む。
+ * window も localStorage も無い環境で読めることを、ここで確かめていることになる。
+ */
+export function loadI18n() {
+  return new Function(`${read("js/i18n.js")}
+    return I18n;`)();
+}
+
+/** dict.js や worker.js が返す { key, params } を、実際の文言にする */
+export function render(issue, I18n) {
+  return I18n.t(issue.key, issue.params || {});
+}
+
 /** 16進数の並びを ArrayBuffer にする */
 export function bytes(hex) {
   const values = hex.trim().split(/\s+/).map((h) => parseInt(h, 16));

@@ -1,6 +1,12 @@
 import { HexView } from "./hexview.js";
 import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
 
+// 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
+const t = (key, params) => window.I18n.t(key, params);
+
+// dict.js と worker.js は文言を持たず、{ key, params } を返す。表示の直前にここで訳す
+const describeIssue = (issue) => (issue && issue.key ? t(issue.key, issue.params || {}) : String(issue));
+
 const qs = s => document.querySelector(s);
 const qsa = s => Array.from(document.querySelectorAll(s));
 
@@ -22,6 +28,17 @@ let STATE = {
 window.addEventListener("DOMContentLoaded", init);
 
 async function init(){
+  // 言語。?lang → 保存値 → ブラウザーの設定の順で決める
+  window.I18n.init();
+  qs("#langToggle").addEventListener("click", () => {
+    window.I18n.setLanguage(window.I18n.language === "ja" ? "en" : "ja");
+  });
+  // 差し替えで消えた文言は、作り直したときに訳し直す
+  document.addEventListener("languagechange", () => {
+    renderSigTable();
+    renderHits(STATE.hits);
+  });
+
   // Theme
   applyTheme(STATE.theme);
   qs("#toggleTheme").checked = document.documentElement.classList.contains("dark");
@@ -111,12 +128,13 @@ function setupFileInfoHandlers() {
       const hashElement = qs(`#fileInfo${hashType.toUpperCase()}`);
       const hashValue = hashElement.textContent.trim();
       
-      if (hashValue && !hashValue.includes('計算中') && !hashValue.includes('エラー')) {
+      // 表示中の文言で判定すると言語を変えたときに壊れる。16進数かどうかで見る
+      if (/^[0-9a-f]{32,128}$/i.test(hashValue)) {
         navigator.clipboard.writeText(hashValue).then(() => {
           showHashCopyToast(hashType.toUpperCase());
         }).catch(err => {
           console.error('Hash copy failed:', err);
-          alert('コピーに失敗しました');
+          alert(t('toast.copyFailed'));
         });
       }
     }
@@ -138,7 +156,7 @@ function showHashCopyToast(hashType) {
     font-size: 14px;
     animation: slideInRight 0.3s ease;
   `;
-  toast.textContent = `${hashType}ハッシュをコピーしました`;
+  toast.textContent = t('toast.hashCopied', { name: hashType });
   document.body.appendChild(toast);
   
   setTimeout(() => {
@@ -239,12 +257,12 @@ function showHitContextMenu(row) {
     <div class="context-menu-backdrop"></div>
     <div class="context-menu-content">
       <h3>${escapeHtml(hit.name)}</h3>
-      <p>オフセット: ${hit.offset ? `0x${hit.offset.toString(16).toUpperCase()}` : 'undefined'}</p>
-      <p>長さ: ${hit.length || '-'} バイト</p>
-      <p>信頼度: ${hit.confidence || '-'}%</p>
+      <p>${escapeHtml(t('modal.offset', { offset: hit.offset ? `0x${hit.offset.toString(16).toUpperCase()}` : 'undefined' }))}</p>
+      <p>${escapeHtml(t('modal.length', { length: hit.length || '-' }))}</p>
+      <p>${escapeHtml(t('modal.confidence', { confidence: hit.confidence || '-' }))}</p>
       <div class="context-menu-actions">
-        <button class="btn primary" type="button" data-act="jump">ジャンプ</button>
-        <button class="btn" type="button" data-act="close">閉じる</button>
+        <button class="btn primary" type="button" data-act="jump">${escapeHtml(t('modal.jump'))}</button>
+        <button class="btn" type="button" data-act="close">${escapeHtml(t('modal.close'))}</button>
       </div>
     </div>
   `;
@@ -466,7 +484,7 @@ function buildSigRow(e) {
     el("td", { text: off }),
     el("td", {}, [el("span", { class: "badge", text: e.category || "-" })]),
     el("td", { class: "cell-center", text: `${conf}%` }),
-    el("td", {}, [el("button", { class: "btn btn-sm", type: "button", dataset: { act: "select" }, text: "編集" })])
+    el("td", {}, [el("button", { class: "btn btn-sm", type: "button", dataset: { act: "select" }, text: t("sig.edit") })])
   ]);
 
   if (STATE.selectedId === e.id) tr.className = "selected";
@@ -491,7 +509,7 @@ function renderSigTable(){
 
   tbody.replaceChildren();
   if (rows.length === 0) {
-    tbody.append(el("tr", {}, [el("td", { colspan: "8", class: "muted", text: "シグネチャがありません" })]));
+    tbody.append(el("tr", {}, [el("td", { colspan: "8", class: "muted", text: t("sig.empty") })]));
   } else {
     tbody.append(...rows);
   }
@@ -543,7 +561,7 @@ function onDupSig(){
 }
 function onDelSig(){
   const cur = currentSig(); if (!cur) return;
-  if (!confirm(`削除しますか？\n${cur.name}`)) return;
+  if (!confirm(t("sig.confirmDelete", { name: cur.name }))) return;
   STATE.dict.entries = STATE.dict.entries.filter(x=>x.id!==cur.id);
   STATE.selectedId = null;
   renderSigTable(); syncEditForm(); saveLocal();
@@ -603,23 +621,23 @@ function onSaveSig(ev){
   e.notes = qs("#f_notes").value;
   e.enabled = qs("#f_enabled").checked;
   renderSigTable(); saveLocal();
-  toast("シグネチャを保存しました");
+  toast(t("sig.saved"));
 }
 function valOrNull(v){ return v==="" ? undefined : Number(v); }
 function onPreviewPattern(){
   const patt = qs("#f_pattern").value.trim();
-  if (!patt){ setPreview("パターンが未入力です"); return; }
+  if (!patt){ setPreview(t("form.patternEmpty")); return; }
   // MVP: 簡易検査（トークン妥当性のみ）
   try{
     patt.split(/\s+/).forEach(tok=>{
       if (/^\?\?$/.test(tok)) return;
       if (/^[0-9A-Fa-f]{2}$/.test(tok)) return;
       if (/^\[[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}\]$/.test(tok)) return;
-      throw new Error(`不正なトークン: ${tok}`);
+      throw new Error(t("form.badToken", { token: tok }));
     });
-    setPreview("OK: トークン妥当性チェックを通過しました（MVP）");
+    setPreview(t("form.tokensOk"));
   }catch(err){
-    setPreview("エラー: " + err.message);
+    setPreview(t("form.errorPrefix") + err.message);
   }
 }
 function setPreview(msg){
@@ -639,7 +657,7 @@ async function onFileInput(e){
     }
   } catch (error) {
     console.error('File input error:', error);
-    alert(`ファイル選択エラー: ${error.message}`);
+    alert(t("toast.fileError", { message: error.message }));
   }
 }
 async function onDrop(e){
@@ -654,13 +672,13 @@ async function onDrop(e){
     }
   } catch (error) {
     console.error('File drop error:', error);
-    alert(`ファイルドロップエラー: ${error.message}`);
+    alert(t("toast.dropError", { message: error.message }));
   }
 }
 async function openFile(file){
   if (!file) {
     console.error('No file provided to openFile');
-    alert('ファイルが指定されていません');
+    alert(t("toast.noFile"));
     return;
   }
   
@@ -672,7 +690,7 @@ async function openFile(file){
   const progressWrap = qs("#progressWrap");
   if (progressWrap) progressWrap.hidden = false;
   setProgress(0);
-  showLoading(`ファイル読み込み中: ${file.name}`);
+  showLoading(t("toast.reading", { name: file.name }));
   
   try {
     STATE.file = file;
@@ -680,7 +698,7 @@ async function openFile(file){
     // Enhanced file reading with chunking for better performance
     const buffer = await readFileWithChunking(file);
     if (!buffer) {
-      throw new Error('ファイルの読み込みに失敗しました (バッファが空です)');
+      throw new Error(t("toast.emptyBuffer"));
     }
     STATE.buffer = buffer;
     
@@ -693,7 +711,7 @@ async function openFile(file){
     // Clear previous state first
     STATE.hits = [];
     renderHits([]);
-    setProgress(100, `読み込み完了`);
+    setProgress(100, t("toast.readDone"));
     
     // Progressive HEX view initialization based on file size
     await initializeHexViewProgressive(file, buffer);
@@ -701,10 +719,10 @@ async function openFile(file){
     // Small delay to show completion
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    toast(`読み込み完了: ${file.name} (${file.size.toLocaleString()} bytes)`);
+    toast(t("toast.readDoneDetail", { name: file.name, bytes: file.size.toLocaleString() }));
   } catch(err) {
     console.error('File loading error:', err);
-    alert(`ファイル読み込みエラー: ${err.message}`);
+    alert(t("toast.readError", { message: err.message }));
   } finally {
     if (dropArea) dropArea.classList.remove("loading");
     hideLoading();
@@ -716,12 +734,12 @@ async function openFile(file){
 function readFileWithChunking(file) {
   return new Promise((resolve, reject) => {
     if (!file) {
-      reject(new Error('ファイルが指定されていません'));
+      reject(new Error(t("toast.noFile")));
       return;
     }
     
     if (file.size === 0) {
-      reject(new Error('ファイルサイズが0バイトです'));
+      reject(new Error(t("toast.zeroSize")));
       return;
     }
     
@@ -749,7 +767,7 @@ function readFileWithChunking(file) {
           position += chunk.byteLength;
         }
         
-        setProgress(100, `読み込み完了`);
+        setProgress(100, t("toast.readDone"));
         resolve(combined.buffer);
         return;
       }
@@ -790,14 +808,14 @@ function readFileStandard(file) {
     // 実際の読み込み量が取れないときは、割合を作らずに「読み込み中」とだけ出す。
     // 以前は乱数で進むバーを見せており、実際の進み具合と関係がなかった。
     const simulateProgress = () => setInterval(() => {
-      if (!hasProgressEvents) setProgress(null, "読み込み中");
+      if (!hasProgressEvents) setProgress(null, t("toast.loading"));
     }, 200);
 
     const progressInterval = simulateProgress();
     
     reader.onload = (e) => {
       clearInterval(progressInterval);
-      setProgress(100, `読み込み完了`);
+      setProgress(100, t("toast.readDone"));
       resolve(e.target.result);
     };
     
@@ -824,16 +842,16 @@ function readFileStandard(file) {
 
 /* ------------ Scan ------------ */
 function startScan(){
-  if (!STATE.buffer){ alert("先にファイルを読み込みます"); return; }
-  if (STATE.worker){ alert("スキャン中です"); return; }
+  if (!STATE.buffer){ alert(t("toast.needFile")); return; }
+  if (STATE.worker){ alert(t("toast.scanning")); return; }
   const scope = qs("#scanRange").value;
   const entries = STATE.dict.entries.filter(e => e.enabled !== false && e.pattern && e.offset);
-  if (!entries.length){ alert("有効なシグネチャがありません"); return; }
+  if (!entries.length){ alert(t("toast.noEnabled")); return; }
   
   // Auto-adjust scan scope for large files
   const fileSize = STATE.buffer.byteLength;
   if (fileSize > 100 * 1024 * 1024 && scope === "full") {
-    if (!confirm(`ファイルサイズが ${(fileSize/1024/1024).toFixed(1)}MB です。全文スキャンは時間がかかる可能性があります。続行しますか？`)) {
+    if (!confirm(t("toast.confirmFull", { mb: (fileSize/1024/1024).toFixed(1) }))) {
       return;
     }
   }
@@ -872,7 +890,7 @@ function startScan(){
   qs("#startScanBtn").disabled = true;
   qs("#cancelScanBtn").disabled = false;
   qs("#progressWrap").hidden = false;
-  setProgress(0, `スキャン開始 (${entries.length}個のシグネチャ)`);
+  setProgress(0, t("toast.scanStart", { count: entries.length }));
 }
 
 function cancelScan(){
@@ -890,7 +908,7 @@ function onScanMessage(e){
   const {type, progress, hits, error} = e.data;
   if (type === "progress"){
     const totalSigs = STATE.dict.entries.filter(e => e.enabled !== false && e.pattern && e.offset).length;
-    setProgress(progress, `スキャン中 (${totalSigs}個のシグネチャ)`);
+    setProgress(progress, t("toast.scanProgress", { count: totalSigs }));
   }
   if (type === "done"){
     STATE.hits = hits || [];
@@ -903,11 +921,11 @@ function onScanMessage(e){
     updateFileInfoWithScanResults(STATE.hits);
     
     // Show completion animation
-    setProgress(100, `完了: ${STATE.hits.length}件のヒット`);
+    setProgress(100, t("toast.scanDone", { count: STATE.hits.length }));
     
     setTimeout(() => {
       cancelScan();
-      toast(`スキャン完了: ${STATE.hits.length} 件のヒット`);
+      toast(t("toast.scanDoneDetail", { count: STATE.hits.length }));
       reportSkipped(STATE.scanSkipped, STATE.trailerChecked);
       
       // Flash hit count if there are hits
@@ -919,7 +937,7 @@ function onScanMessage(e){
     }, 300);
   }
   if (type === "error"){
-    alert(`スキャンエラー: ${error}`);
+    alert(t("toast.scanError", { message: error }));
     cancelScan();
   }
 }
@@ -931,7 +949,7 @@ function setProgress(p, text){
   // p が null のときは割合が分からない。数字を作らず、動いていることだけを見せる
   if (p === null || typeof p === "undefined") {
     bar.classList.add("indeterminate");
-    progressText.textContent = text || "処理中";
+    progressText.textContent = text || t("toast.processing");
     return;
   }
 
@@ -946,58 +964,58 @@ function generateHitNote(signatureName, offset, confidence) {
   if (!signatureName) return "";
   
   const name = signatureName.toLowerCase();
-  const offsetText = offset === 0 ? "ファイル先頭" : `オフセット0x${offset.toString(16)}`;
+  const offsetText = offset === 0 ? t("note.headStart") : t("note.atOffset", { hex: offset.toString(16) });
   
   // File format specific notes
   if (name.includes('jpeg') || name.includes('jpg')) {
-    if (name.includes('soi')) return "JPEG画像の開始マーカー";
-    if (name.includes('eoi')) return "JPEG画像の終了マーカー"; 
-    if (name.includes('exif')) return "JPEG Exifメタデータ";
-    return "JPEG画像関連のデータ";
+    if (name.includes('soi')) return t("fmt.jpegSoi");
+    if (name.includes('eoi')) return t("fmt.jpegEoi");
+    if (name.includes('exif')) return t("fmt.jpegExif");
+    return t("fmt.jpegOther");
   }
   
   if (name.includes('png')) {
-    if (name.includes('ihdr')) return "PNG画像ヘッダー";
-    if (name.includes('iend')) return "PNG画像終了";
-    return "PNG画像データ";
+    if (name.includes('ihdr')) return t("fmt.pngHeader");
+    if (name.includes('iend')) return t("fmt.pngEnd");
+    return t("fmt.pngData");
   }
   
   if (name.includes('gif')) {
-    if (name.includes('87a') || name.includes('89a')) return "GIF画像ヘッダー";
-    return "GIF画像データ";
+    if (name.includes('87a') || name.includes('89a')) return t("fmt.gifHeader");
+    return t("fmt.gifData");
   }
   
-  if (name.includes('pdf')) return "PDFドキュメント";
-  if (name.includes('zip')) return "ZIP圧縮アーカイブ";
-  if (name.includes('rar')) return "RAR圧縮アーカイブ";
-  if (name.includes('7z')) return "7-Zip圧縮アーカイブ";
+  if (name.includes('pdf')) return t("fmt.pdf");
+  if (name.includes('zip')) return t("fmt.zip");
+  if (name.includes('rar')) return t("fmt.rar");
+  if (name.includes('7z')) return t("fmt.sevenZip");
   
-  if (name.includes('mp3')) return "MP3音声ファイル";
-  if (name.includes('mp4')) return "MP4動画/音声ファイル";
-  if (name.includes('avi')) return "AVI動画ファイル";
+  if (name.includes('mp3')) return t("fmt.mp3");
+  if (name.includes('mp4')) return t("fmt.mp4");
+  if (name.includes('avi')) return t("fmt.avi");
   
-  if (name.includes('exe') || name.includes('pe')) return "Windows実行ファイル";
-  if (name.includes('elf')) return "Linux実行ファイル";
-  if (name.includes('mach-o')) return "macOS実行ファイル";
+  if (name.includes('exe') || name.includes('pe')) return t("fmt.exe");
+  if (name.includes('elf')) return t("fmt.elf");
+  if (name.includes('mach-o')) return t("fmt.macho");
   
-  if (name.includes('office') || name.includes('docx') || name.includes('xlsx')) return "Microsoft Officeドキュメント";
-  if (name.includes('rtf')) return "リッチテキスト文書";
-  if (name.includes('xml')) return "XML文書データ";
-  if (name.includes('html')) return "HTML文書";
+  if (name.includes('office') || name.includes('docx') || name.includes('xlsx')) return t("fmt.office");
+  if (name.includes('rtf')) return t("fmt.rtf");
+  if (name.includes('xml')) return t("fmt.xml");
+  if (name.includes('html')) return t("fmt.html");
   
-  if (name.includes('bmp')) return "Bitmap画像";
-  if (name.includes('tiff')) return "TIFF画像";
-  if (name.includes('ico')) return "Windowsアイコン";
+  if (name.includes('bmp')) return t("fmt.bmp");
+  if (name.includes('tiff')) return t("fmt.tiff");
+  if (name.includes('ico')) return t("fmt.ico");
   
-  if (name.includes('tar')) return "TAR形式アーカイブ";
-  if (name.includes('gzip')) return "GZIP圧縮データ";
+  if (name.includes('tar')) return t("fmt.tar");
+  if (name.includes('gzip')) return t("fmt.gzip");
   
   // Confidence based general notes
-  if (confidence >= 90) return `高信頼度の${offsetText}でのパターン検出`;
-  if (confidence >= 70) return `${offsetText}でのパターン一致`;
-  if (confidence >= 50) return `可能性あり：${offsetText}`;
+  if (confidence >= 90) return t("note.highConfidence", { where: offsetText });
+  if (confidence >= 70) return t("note.match", { where: offsetText });
+  if (confidence >= 50) return t("note.maybe", { where: offsetText });
   
-  return `${offsetText}でのシグネチャ検出`;
+  return t("note.detected", { where: offsetText });
 }
 
 /**
@@ -1009,14 +1027,14 @@ function reportSkipped(skipped, trailerChecked){
   if (!skipped) return;
   const messages = [];
   if (!trailerChecked && skipped.trailerUnverifiable > 0) {
-    messages.push(`末尾を見ない範囲の走査のため、終端の並びを確かめるシグネチャ${skipped.trailerUnverifiable}件は判定していません`);
+    messages.push(t("toast.skipTrailer", { count: skipped.trailerUnverifiable }));
   }
   if (skipped.outOfSize > 0) {
-    messages.push(`大きさの条件に合わないシグネチャ${skipped.outOfSize}件を除きました`);
+    messages.push(t("toast.skipSize", { count: skipped.outOfSize }));
   }
   const invalid = skipped.invalidPattern || [];
   if (invalid.length > 0) {
-    messages.push(`パターンを読めないシグネチャ${invalid.length}件を飛ばしました（例: ${invalid[0].name}）`);
+    messages.push(t("toast.skipInvalid", { count: invalid.length, name: invalid[0].name }));
   }
   for (const message of messages) toast(message);
 }
@@ -1024,7 +1042,7 @@ function reportSkipped(skipped, trailerChecked){
 function renderHits(hits){
   const tbody = qs("#hitsTbody");
   if (!hits.length){
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">ヒットなし</td></tr>`;
+    tbody.replaceChildren(el("tr", {}, [el("td", { colspan: "6", class: "muted", text: t("hits.none") })]));
     STATE.hex.setHighlights([]);
     STATE.selectedHitIndex = null;
     return;
@@ -1052,9 +1070,9 @@ function renderHits(hits){
     // 終端の並びを照合した結果。
     // 「あるはずの終端が見つからない」ことこそ、壊れたファイルの手がかりになる
     const trailerLabels = {
-      found: "✅ あり",
-      missing: "⚠️ 見つからない",
-      unchecked: "－ 未照合",
+      found: t("hits.trailerFound"),
+      missing: t("hits.trailerMissing"),
+      unchecked: t("hits.trailerUnchecked"),
       none: "－"
     };
     const trailerLabel = trailerLabels[h.trailerState] || "－";
@@ -1186,8 +1204,8 @@ function exportJson(entries){
 
 function exportForemost(entries){
   const lines = [
-    "# foremost 設定ファイル（MagicSign Inspector が生成）",
-    "# 書式: 拡張子  大小文字の区別  最大サイズ  ヘッダー  [フッター]",
+    t("foremost.header1"),
+    t("foremost.header2"),
     ""
   ];
   const skipped = [];
@@ -1198,7 +1216,7 @@ function exportForemost(entries){
     const header = toForemostBytes(e.pattern);
     if (header.error) {
       // 範囲指定は foremost に対応する書き方がない。黙って壊れた行を出さない
-      skipped.push(`${e.name || e.extensions[0]}: ${header.error}`);
+      skipped.push(t("foremost.headerError", { name: e.name || e.extensions[0], error: describeIssue(header.error) }));
       return;
     }
 
@@ -1207,7 +1225,7 @@ function exportForemost(entries){
     if (e.trailer) {
       const footer = toForemostBytes(e.trailer);
       if (footer.error) {
-        skipped.push(`${e.name || e.extensions[0]}: 終端が ${footer.error}`);
+        skipped.push(t("foremost.trailerError", { name: e.name || e.extensions[0], error: describeIssue(footer.error) }));
         return;
       }
       line += `\t${footer.value}`;
@@ -1225,7 +1243,7 @@ function exportForemost(entries){
   URL.revokeObjectURL(url);
 
   if (skipped.length > 0) {
-    toast(`${skipped.length}件は foremost の書式にできないため省きました（例: ${skipped[0]}）`);
+    toast(t("toast.foremostSkipped", { count: skipped.length, sample: skipped[0] }));
   }
 }
 
@@ -1233,7 +1251,7 @@ async function onImport(){
   const file = qs("#importFile").files?.[0];
   if (!file) return;
   
-  showLoading(`辞書をインポート中: ${file.name}`);
+  showLoading(t("toast.importing", { name: file.name }));
   
   try {
     const text = await file.text();
@@ -1251,8 +1269,8 @@ async function onImport(){
         renderSigTable();
         saveLocal();
       }
-      toast(`インポート完了: ${accepted.length} 件`);
-      if (errors.length > 0) toast(`${errors.length}行を読めませんでした（例: ${errors[0]}）`);
+      toast(t("toast.importDone", { count: accepted.length }));
+      if (errors.length > 0) toast(t("toast.importLineErrors", { count: errors.length, sample: describeIssue(errors[0]) }));
       return;
     }
 
@@ -1266,17 +1284,17 @@ async function onImport(){
         renderSigTable();
         saveLocal();
       }
-      toast(`インポート完了: ${accepted.length} 件`);
+      toast(t("toast.importDone", { count: accepted.length }));
 
       // 落ちたものは黙って捨てず、件数と理由の例を伝える
       if (errors.length > 0) {
-        toast(`${errors.length}件を取り込めませんでした（例: ${errors[0]}）`);
+        toast(t("toast.importItemErrors", { count: errors.length, sample: describeIssue(errors[0]) }));
       }
     } else {
-      throw new Error("entries の配列が見つかりません");
+      throw new Error(t("toast.noEntries"));
     }
   } catch(err) {
-    alert(`インポートエラー: ${err.message}`);
+    alert(t("toast.importError", { message: err.message }));
   } finally {
     hideLoading();
   }
@@ -1337,7 +1355,8 @@ function escapeHtml(str){
 }
 
 /* ------------ Loading UI ------------ */
-function showLoading(text = "処理中..."){
+function showLoading(text){
+  text = text || t("loading.text");
   const overlay = qs("#loadingOverlay");
   const loadingText = qs("#loadingText");
   loadingText.textContent = text;
@@ -1405,8 +1424,8 @@ function showPartialHexView(buffer, maxBytes) {
     const infoElement = document.createElement('div');
     infoElement.className = 'hex-partial-info';
     const banner = el("div", { class: "hex-partial-banner" }, [
-      document.createTextNode(`📝 大容量ファイルのため、先頭 ${(maxBytes/1024/1024).toFixed(1)}MB のみ表示中`),
-      el("button", { class: "btn btn-sm", type: "button", text: "全体を表示" })
+      document.createTextNode(t("hex.partialBanner", { mb: (maxBytes/1024/1024).toFixed(1) })),
+      el("button", { class: "btn btn-sm", type: "button", text: t("hex.showAll") })
     ]);
     banner.querySelector("button").addEventListener("click", () => {
       infoElement.remove();

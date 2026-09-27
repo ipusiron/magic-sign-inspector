@@ -1,4 +1,7 @@
 // File Information Functions for MagicSign Inspector
+// 文言は js/i18n.js が持つ
+const tf = (key, params) => window.I18n.t(key, params);
+
 // Handles file metadata, hash calculation, and entropy analysis
 
 /* ------------ File Information Functions ------------ */
@@ -10,16 +13,16 @@ function showFileInfo(file) {
   // Basic file information
   document.querySelector('#fileInfoName').textContent = file.name;
   document.querySelector('#fileInfoSize').innerHTML = formatFileSize(file.size);
-  document.querySelector('#fileInfoModified').textContent = file.lastModified ? new Date(file.lastModified).toLocaleString('ja-JP') : '不明';
+  document.querySelector('#fileInfoModified').textContent = file.lastModified ? new Date(file.lastModified).toLocaleString(window.I18n.language === 'en' ? 'en-US' : 'ja-JP') : tf('info.unknown');
   document.querySelector('#fileInfoType').textContent = file.type || 'application/octet-stream';
   
   // Reset hash status
-  document.querySelector('#hashStatus').textContent = '計算中...';
+  document.querySelector('#hashStatus').textContent = tf('info.calculating');
   document.querySelector('#hashStatus').className = 'hash-status';
   
   // Reset analysis fields
-  document.querySelector('#fileInfoPatterns').textContent = 'スキャン待ち';
-  document.querySelector('#fileInfoFormat').textContent = '解析中...';
+  document.querySelector('#fileInfoPatterns').textContent = tf('info.scanWait');
+  document.querySelector('#fileInfoFormat').textContent = tf('info.analyzing');
   
   // Hide Exif checker row initially
   const exifRow = document.querySelector('#exifCheckRow');
@@ -59,21 +62,21 @@ async function calculateFileHashes(buffer) {
       updateHashUI('MD5', md5);
     } catch (md5Error) {
       console.warn('MD5 calculation failed:', md5Error);
-      updateHashUI('MD5', 'MD5計算はこのブラウザーではサポートされていません');
+      updateHashUI('MD5', tf('info.md5Unsupported'));
     }
     
-    document.querySelector('#hashStatus').textContent = '完了';
+    document.querySelector('#hashStatus').textContent = tf('info.done');
     document.querySelector('#hashStatus').className = 'hash-status completed';
     
   } catch (error) {
     console.error('Hash calculation failed:', error);
-    document.querySelector('#hashStatus').textContent = 'エラー';
+    document.querySelector('#hashStatus').textContent = tf('info.error');
     document.querySelector('#hashStatus').className = 'hash-status error';
     
     // Show error in hash fields
-    updateHashUI('MD5', 'エラー: 計算に失敗しました');
-    updateHashUI('SHA1', 'エラー: 計算に失敗しました');
-    updateHashUI('SHA256', 'エラー: 計算に失敗しました');
+    updateHashUI('MD5', tf('info.calcFailed'));
+    updateHashUI('SHA1', tf('info.calcFailed'));
+    updateHashUI('SHA256', tf('info.calcFailed'));
   }
 }
 
@@ -229,7 +232,7 @@ async function calculateFileEntropy(buffer) {
     
   } catch (error) {
     console.error('Entropy calculation failed:', error);
-    document.querySelector('#fileInfoEntropy').innerHTML = '<span class="entropy-loading">エラー: 計算に失敗しました</span>';
+    document.querySelector('#fileInfoEntropy').replaceChildren(Object.assign(document.createElement('span'), { className: 'entropy-loading', textContent: tf('info.calcFailed') }));
   }
 }
 
@@ -255,21 +258,25 @@ function calculateEntropy(buffer) {
 
 function updateFileInfoWithScanResults(hits) {
   // Update pattern detection count
-  document.querySelector('#fileInfoPatterns').textContent = `${hits.length} 個のパターンを検出`;
+  document.querySelector('#fileInfoPatterns').textContent = tf('info.patternCount', { count: hits.length });
   
   // Analyze detected formats and show badges
   const detectedFormats = analyzeDetectedFormats(hits);
   const formatElement = document.querySelector('#fileInfoFormat');
   
   if (detectedFormats.length === 0) {
-    formatElement.innerHTML = '<span class="format-badge low-confidence">不明</span>';
+    formatElement.replaceChildren(Object.assign(document.createElement('span'), { className: 'format-badge low-confidence', textContent: tf('info.unknown') }));
   } else {
     const badges = detectedFormats.map(format => {
       const confidenceClass = format.confidence >= 90 ? 'high-confidence' : 
                              format.confidence >= 70 ? 'medium-confidence' : 'low-confidence';
-      return `<span class="format-badge ${confidenceClass}" title="信頼度: ${format.confidence}%">${format.name}</span>`;
+      const badge = document.createElement('span');
+      badge.className = `format-badge ${confidenceClass}`;
+      badge.title = tf('info.confidenceTitle', { confidence: format.confidence });
+      badge.textContent = format.name;
+      return badge;
     });
-    formatElement.innerHTML = badges.join('');
+    formatElement.replaceChildren(...badges);
   }
   
   // Show Exif checker link for JPEG/PNG files
