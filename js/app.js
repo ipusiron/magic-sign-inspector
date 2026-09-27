@@ -1,7 +1,17 @@
 import { HexView } from "./hexview.js";
+import { validateEntries, toForemostBytes, parseForemostConf } from "./dict.js";
+
+// 文言は js/i18n.js が持つ。ここには言語ごとの文字列を置かない
+const t = (key, params) => window.I18n.t(key, params);
+
+// dict.js と worker.js は文言を持たず、{ key, params } を返す。表示の直前にここで訳す
+const describeIssue = (issue) => (issue && issue.key ? t(issue.key, issue.params || {}) : String(issue));
 
 const qs = s => document.querySelector(s);
 const qsa = s => Array.from(document.querySelectorAll(s));
+
+const DEBUG = false;
+const debugLog = (...args) => { if (DEBUG) console.log(...args); };
 
 let STATE = {
   dict: { version:"1.0", entries:[] },
@@ -18,6 +28,17 @@ let STATE = {
 window.addEventListener("DOMContentLoaded", init);
 
 async function init(){
+  // 言語。?lang → 保存値 → ブラウザーの設定の順で決める
+  window.I18n.init();
+  qs("#langToggle").addEventListener("click", () => {
+    window.I18n.setLanguage(window.I18n.language === "ja" ? "en" : "ja");
+  });
+  // 差し替えで消えた文言は、作り直したときに訳し直す
+  document.addEventListener("languagechange", () => {
+    renderSigTable();
+    renderHits(STATE.hits);
+  });
+
   // Theme
   applyTheme(STATE.theme);
   qs("#toggleTheme").checked = document.documentElement.classList.contains("dark");
@@ -26,8 +47,14 @@ async function init(){
   // HexView
   STATE.hex = new HexView(qs("#hexView"));
 
+  // このファイルはモジュールなので、外のスクリプトからは STATE が見えない。
+  // 必要なものだけを名前を付けて公開する（以前は window.STATE を参照しており、
+  // 常に undefined でショートカットが動いていなかった）。
+  window.MSI = { get hex() { return STATE.hex; } };
+
   // Tabs
   qsa(".main-tab").forEach(btn=>btn.addEventListener("click", onTab));
+  setupTabKeyboard();
 
   // File open
   qs("#openFileBtn").addEventListener("click", ()=>qs("#fileInput").click());
@@ -85,140 +112,14 @@ async function init(){
   await loadDefaultDict();
   renderSigTable();
   
-  // Remove any footer copy UI that might be lingering
-  cleanupFooterCopyUI();
 }
 
 /* ------------ Footer Copy UI Cleanup ------------ */
-function cleanupFooterCopyUI() {
-  // Ensure DOM is ready
-  if (!document.body) {
-    setTimeout(cleanupFooterCopyUI, 100);
-    return;
-  }
+// cleanupFooterCopyUI / setupCopyUIObserver は削除した。
+// 「コピー」を含むノードを見つけ次第消す仕掛けだったため、
+// 自作のコピー完了トーストを表示直後に消していた。
+// 元になったコンテキストメニューはすでに無効化されている。
 
-  try {
-    // Only target elements that are positioned at the bottom or have suspicious copy-related classes
-    const suspiciousCopyElements = document.querySelectorAll(`
-      [style*="position:fixed"][style*="bottom"],
-      [style*="position: fixed"][style*="bottom"], 
-      [class*="copy-ui"], 
-      [class*="floating-copy"], 
-      [id*="copy-ui"], 
-      [id*="floating-copy"], 
-      [class*="copy-toolbar"],
-      [class*="copy-floating"],
-      [class*="bottom-copy"]
-    `);
-    
-    suspiciousCopyElements.forEach(el => {
-      try {
-        // Double-check it's not our legitimate copy buttons
-        if (!el.closest('.hex-copy-buttons') && !el.closest('.hex-context-menu')) {
-          console.log('Removing suspicious positioned copy element:', el.tagName, el.className);
-          el.remove();
-        }
-      } catch (e) {
-        console.warn('Failed to remove suspicious element:', e);
-      }
-    });
-    
-    // Remove any fixed positioned elements that might be copy UI
-    const fixedElements = document.querySelectorAll('[style*="position: fixed"], [style*="position:fixed"]');
-    fixedElements.forEach(el => {
-      try {
-        const style = el.style.cssText.toLowerCase();
-        if (style.includes('bottom') && (
-            (el.textContent && el.textContent.includes('コピー')) || 
-            el.classList.toString().includes('copy') ||
-            el.id.includes('copy')
-          )) {
-          console.log('Removing fixed copy UI element:', el);
-          el.remove();
-        }
-      } catch (e) {
-        console.warn('Failed to process fixed element:', e);
-      }
-    });
-    
-    // Remove any elements with copy-related class names or IDs
-    const suspiciousElements = document.querySelectorAll(
-      '[class*="copy-ui"], [class*="floating-copy"], [id*="copy-ui"], [id*="floating-copy"], [class*="copy-toolbar"]'
-    );
-    suspiciousElements.forEach(el => {
-      try {
-        if (!el.closest('.hex-copy-buttons') && !el.closest('.hex-context-menu')) {
-          console.log('Removing suspicious copy UI element:', el);
-          el.remove();
-        }
-      } catch (e) {
-        console.warn('Failed to remove suspicious element:', e);
-      }
-    });
-    
-    // Remove any existing context menu elements
-    const contextMenus = document.querySelectorAll('.hex-context-menu');
-    contextMenus.forEach(menu => {
-      console.log('Removing context menu:', menu);
-      menu.remove();
-    });
-
-    // Set up MutationObserver for dynamic content with copy-related texts
-    const copyTexts = ['16進数をコピー', 'ASCIIをコピー', '生バイトをコピー', 'コピー', 'copy'];
-    setupCopyUIObserver(copyTexts);
-    
-  } catch (error) {
-    console.warn('Error in cleanupFooterCopyUI:', error);
-  }
-}
-
-function setupCopyUIObserver(copyTexts) {
-  // Wait for DOM to be fully ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setupCopyUIObserver(copyTexts));
-    return;
-  }
-  
-  if (!document.body) {
-    setTimeout(() => setupCopyUIObserver(copyTexts), 100);
-    return;
-  }
-  
-  try {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach((node) => {
-            if (node && node.nodeType === Node.ELEMENT_NODE) {
-              try {
-                copyTexts.forEach(text => {
-                  if (node.textContent && node.textContent.includes(text) && 
-                      !node.closest('.hex-copy-buttons') && 
-                      !node.closest('.hex-context-menu') &&
-                      !node.closest('.help-content')) {
-                    console.log('Auto-removing dynamically added copy UI:', node);
-                    node.remove();
-                  }
-                });
-              } catch (e) {
-                // Ignore errors from removed nodes
-              }
-            }
-          });
-        }
-      });
-    });
-    
-    observer.observe(document.body, { 
-      childList: true, 
-      subtree: true 
-    });
-  } catch (error) {
-    console.warn('Failed to set up MutationObserver:', error);
-  }
-}
-
-/* ------------ File Information Handlers ------------ */
 function setupFileInfoHandlers() {
   // Hash copy buttons
   document.addEventListener('click', (e) => {
@@ -227,12 +128,13 @@ function setupFileInfoHandlers() {
       const hashElement = qs(`#fileInfo${hashType.toUpperCase()}`);
       const hashValue = hashElement.textContent.trim();
       
-      if (hashValue && !hashValue.includes('計算中') && !hashValue.includes('エラー')) {
+      // 表示中の文言で判定すると言語を変えたときに壊れる。16進数かどうかで見る
+      if (/^[0-9a-f]{32,128}$/i.test(hashValue)) {
         navigator.clipboard.writeText(hashValue).then(() => {
           showHashCopyToast(hashType.toUpperCase());
         }).catch(err => {
           console.error('Hash copy failed:', err);
-          alert('コピーに失敗しました');
+          alert(t('toast.copyFailed'));
         });
       }
     }
@@ -254,7 +156,7 @@ function showHashCopyToast(hashType) {
     font-size: 14px;
     animation: slideInRight 0.3s ease;
   `;
-  toast.textContent = `${hashType}ハッシュをコピーしました`;
+  toast.textContent = t('toast.hashCopied', { name: hashType });
   document.body.appendChild(toast);
   
   setTimeout(() => {
@@ -291,42 +193,9 @@ function initMobileTouchHandlers() {
     if (hint) hint.style.display = 'none';
   }
   
-  // Prevent iOS double-tap zoom on buttons
-  document.addEventListener('touchend', (e) => {
-    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-      e.preventDefault();
-    }
-  });
-  
-  // Swipe navigation for tabs
-  const tabPanels = qs('.tab-panels');
-  let startX = 0;
-  let startY = 0;
-  let isScrolling = undefined;
-  
-  tabPanels.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    startX = touch.clientX;
-    startY = touch.clientY;
-    isScrolling = undefined;
-  }, { passive: true });
-  
-  tabPanels.addEventListener('touchmove', (e) => {
-    if (e.touches.length > 1) return; // Multi-touch
-    
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - startX;
-    const deltaY = touch.clientY - startY;
-    
-    if (isScrolling === undefined) {
-      isScrolling = Math.abs(deltaY) > Math.abs(deltaX);
-    }
-    
-    // If horizontal swipe, prevent default scrolling
-    if (!isScrolling && Math.abs(deltaX) > 50) {
-      e.preventDefault();
-    }
-  }, { passive: false });
+  // ダブルタップの拡大抑止は CSS の touch-action で行う。
+  // document への touchend で preventDefault すると、合成されるクリックまで止まり、
+  // タッチ端末でボタンが反応しなくなる。
   
   tabPanels.addEventListener('touchend', (e) => {
     if (isScrolling || Math.abs(e.changedTouches[0].clientX - startX) < 80) {
@@ -388,12 +257,12 @@ function showHitContextMenu(row) {
     <div class="context-menu-backdrop"></div>
     <div class="context-menu-content">
       <h3>${escapeHtml(hit.name)}</h3>
-      <p>オフセット: ${hit.offset ? `0x${hit.offset.toString(16).toUpperCase()}` : 'undefined'}</p>
-      <p>長さ: ${hit.length || '-'} バイト</p>
-      <p>信頼度: ${hit.confidence || '-'}%</p>
+      <p>${escapeHtml(t('modal.offset', { offset: hit.offset ? `0x${hit.offset.toString(16).toUpperCase()}` : 'undefined' }))}</p>
+      <p>${escapeHtml(t('modal.length', { length: hit.length || '-' }))}</p>
+      <p>${escapeHtml(t('modal.confidence', { confidence: hit.confidence || '-' }))}</p>
       <div class="context-menu-actions">
-        <button class="btn primary" onclick="STATE.hex.scrollToOffset(${hit.offset}); this.closest('.mobile-context-menu').remove();">ジャンプ</button>
-        <button class="btn" onclick="this.closest('.mobile-context-menu').remove();">閉じる</button>
+        <button class="btn primary" type="button" data-act="jump">${escapeHtml(t('modal.jump'))}</button>
+        <button class="btn" type="button" data-act="close">${escapeHtml(t('modal.close'))}</button>
       </div>
     </div>
   `;
@@ -403,6 +272,15 @@ function showHitContextMenu(row) {
   // Remove on backdrop click
   menu.querySelector('.context-menu-backdrop').addEventListener('click', () => {
     menu.remove();
+  });
+
+  // インラインの onclick をやめ、ここで結ぶ。
+  // app.js はモジュールなので STATE は window から見えず、
+  // インラインの onclick からは参照できずに ReferenceError になっていた。
+  menu.addEventListener("click", (ev) => {
+    const act = ev.target?.dataset?.act;
+    if (act === "jump" && typeof hit.offset === "number") STATE.hex.scrollToOffset(hit.offset);
+    if (act === "jump" || act === "close") menu.remove();
   });
   
   // Auto-remove after 5 seconds
@@ -425,6 +303,40 @@ function applyTheme(mode){
 }
 
 /* ------------ Tabs ------------ */
+
+/**
+ * WAI-ARIAのタブは、左右のキーで移動し、Homeで先頭、Endで末尾へ行く。
+ * Tabキーで中身へ入れるよう、選ばれているタブだけがフォーカス順に入る。
+ */
+function setupTabKeyboard(){
+  const tabs = qsa(".main-tab");
+
+  const updateTabIndex = () => {
+    tabs.forEach(t => { t.tabIndex = t.classList.contains("active") ? 0 : -1; });
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("keydown", (e) => {
+      const last = tabs.length - 1;
+      let next = null;
+      if (e.key === "ArrowRight") next = index === last ? 0 : index + 1;
+      if (e.key === "ArrowLeft") next = index === 0 ? last : index - 1;
+      if (e.key === "Home") next = 0;
+      if (e.key === "End") next = last;
+      if (next === null) return;
+
+      e.preventDefault();
+      tabs[next].click();
+      updateTabIndex();
+      tabs[next].focus();
+    });
+  });
+
+  updateTabIndex();
+  document.addEventListener("msi:tabchanged", updateTabIndex);
+}
+
+
 function onTab(e){
   qsa(".main-tab").forEach(b=>{
     b.classList.remove("active");
@@ -435,6 +347,7 @@ function onTab(e){
   e.currentTarget.setAttribute("aria-selected", "true");
   const name = e.currentTarget.dataset.tab;
   qs(`#tab-${name}`).classList.add("active");
+  document.dispatchEvent(new CustomEvent("msi:tabchanged"));
   
   // Auto-switch to inspect tab when file is loaded
   if (name === "inspect" && STATE.file) {
@@ -449,7 +362,7 @@ async function loadDefaultDict(){
   if (saved && qs("#setAutosave")?.checked !== false) {
     try {
       STATE.dict = JSON.parse(saved);
-      console.log("Loaded dictionary from localStorage");
+      debugLog("Loaded dictionary from localStorage");
       return;
     } catch (err) {
       console.warn("Failed to load from localStorage, loading default:", err);
@@ -461,7 +374,7 @@ async function loadDefaultDict(){
     const res = await fetch("sigs/default.json");
     const dict = await res.json();
     STATE.dict = dict;
-    console.log("Loaded default dictionary");
+    debugLog("Loaded default dictionary");
     
     // Check if enhanced dictionaries are available and offer to load them
     await loadEnhancedDictionaries();
@@ -509,7 +422,7 @@ async function loadEnhancedDictionaries() {
           
           STATE.dict.entries.push(...newEntries);
           totalAdded += newEntries.length;
-          console.log(`Loaded ${newEntries.length} signatures from ${name}`);
+          debugLog(`Loaded ${newEntries.length} signatures from ${name}`);
         }
       }
     } catch (err) {
@@ -518,7 +431,7 @@ async function loadEnhancedDictionaries() {
   }
   
   if (totalAdded > 0) {
-    console.log(`Total enhanced signatures loaded: ${totalAdded}`);
+    debugLog(`Total enhanced signatures loaded: ${totalAdded}`);
     // Save the enhanced dictionary to localStorage
     if (qs("#setAutosave")?.checked !== false) {
       localStorage.setItem("msi_dict", JSON.stringify(STATE.dict));
@@ -527,6 +440,57 @@ async function loadEnhancedDictionaries() {
 }
 
 /* ------------ Signatures UI ------------ */
+/**
+ * 要素を組み立てる小さなヘルパー。
+ * HTML文字列を作らないので、辞書の中身に何が入っていても表示が壊れない。
+ */
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(props)) {
+    if (name === "class") node.className = value;
+    else if (name === "text") node.textContent = value;
+    else if (name === "dataset") Object.assign(node.dataset, value);
+    else if (value !== null && typeof value !== "undefined") node.setAttribute(name, value);
+  }
+  for (const child of [].concat(children)) {
+    if (child) node.append(child);
+  }
+  return node;
+}
+
+/**
+ * シグネチャ1件の行を組み立てる。
+ * 以前は拡張子・カテゴリ・idをそのままHTMLへ差し込んでいた。
+ * 辞書はインポートできて localStorage へ残るので、
+ * 壊れた値を入れた辞書を読ませるだけで表示を乗っ取れる状態だった。
+ * とくに id は data-id="${e.id}" と属性に入れており、
+ * 引用符ひとつで属性から抜け出せた。
+ */
+function buildSigRow(e) {
+  const exts = (e.extensions || []).join(",") || "-";
+  const patt = (e.pattern || "").slice(0, 50) + (e.pattern && e.pattern.length > 50 ? "…" : "");
+  const off = e.offset?.type === "absolute" ? `@${e.offset.value || 0}` : "relative";
+  const conf = e.confidence ?? 80;
+  const enabled = e.enabled !== false;
+
+  const checkbox = el("input", { type: "checkbox", dataset: { act: "toggle" } });
+  checkbox.checked = enabled;
+
+  const tr = el("tr", { dataset: { id: String(e.id ?? "") } }, [
+    el("td", { class: "cell-center" }, [checkbox]),
+    el("td", { class: "name", text: e.name || "" }),
+    el("td", { text: exts }),
+    el("td", {}, [el("code", { text: patt })]),
+    el("td", { text: off }),
+    el("td", {}, [el("span", { class: "badge", text: e.category || "-" })]),
+    el("td", { class: "cell-center", text: `${conf}%` }),
+    el("td", {}, [el("button", { class: "btn btn-sm", type: "button", dataset: { act: "select" }, text: t("sig.edit") })])
+  ]);
+
+  if (STATE.selectedId === e.id) tr.className = "selected";
+  return tr;
+}
+
 function renderSigTable(){
   const tbody = qs("#sigTbody");
   const search = qs("#sigSearch").value.trim().toLowerCase();
@@ -541,27 +505,14 @@ function renderSigTable(){
       const s = `${e.name} ${(e.extensions||[]).join(",")} ${e.category}`.toLowerCase();
       return s.includes(search);
     })
-    .map(e=>{
-      const exts = (e.extensions||[]).join(",") || "-";
-      const patt = (e.pattern||"").slice(0,50) + (e.pattern && e.pattern.length>50 ? "…" : "");
-      const off = e.offset?.type==="absolute" ? `@${e.offset.value||0}` : "relative";
-      const conf = e.confidence ?? 80;
-      const enabled = e.enabled !== false;
-      const selected = (STATE.selectedId === e.id) ? ' class="selected"' : "";
-      return `<tr data-id="${e.id}"${selected}>
-        <td style="text-align:center"><input type="checkbox" ${enabled?"checked":""} data-act="toggle" /></td>
-        <td class="name">${escapeHtml(e.name||"")}</td>
-        <td>${exts}</td>
-        <td><code>${escapeHtml(patt)}</code></td>
-        <td>${off}</td>
-        <td><span class="badge">${e.category||"-"}</span></td>
-        <td style="text-align:center">${conf}%</td>
-        <td>
-          <button class="btn btn-sm" data-act="select">編集</button>
-        </td>
-      </tr>`;
-    }).join("");
-  tbody.innerHTML = rows || `<tr><td colspan="8" class="muted">シグネチャがありません</td></tr>`;
+    .map(buildSigRow);
+
+  tbody.replaceChildren();
+  if (rows.length === 0) {
+    tbody.append(el("tr", {}, [el("td", { colspan: "8", class: "muted", text: t("sig.empty") })]));
+  } else {
+    tbody.append(...rows);
+  }
 
   // bind
   tbody.querySelectorAll("tr").forEach(tr=>{
@@ -610,7 +561,7 @@ function onDupSig(){
 }
 function onDelSig(){
   const cur = currentSig(); if (!cur) return;
-  if (!confirm(`削除しますか？\n${cur.name}`)) return;
+  if (!confirm(t("sig.confirmDelete", { name: cur.name }))) return;
   STATE.dict.entries = STATE.dict.entries.filter(x=>x.id!==cur.id);
   STATE.selectedId = null;
   renderSigTable(); syncEditForm(); saveLocal();
@@ -670,23 +621,23 @@ function onSaveSig(ev){
   e.notes = qs("#f_notes").value;
   e.enabled = qs("#f_enabled").checked;
   renderSigTable(); saveLocal();
-  toast("シグネチャを保存しました");
+  toast(t("sig.saved"));
 }
 function valOrNull(v){ return v==="" ? undefined : Number(v); }
 function onPreviewPattern(){
   const patt = qs("#f_pattern").value.trim();
-  if (!patt){ setPreview("パターンが未入力です"); return; }
+  if (!patt){ setPreview(t("form.patternEmpty")); return; }
   // MVP: 簡易検査（トークン妥当性のみ）
   try{
     patt.split(/\s+/).forEach(tok=>{
       if (/^\?\?$/.test(tok)) return;
       if (/^[0-9A-Fa-f]{2}$/.test(tok)) return;
       if (/^\[[0-9A-Fa-f]{2}-[0-9A-Fa-f]{2}\]$/.test(tok)) return;
-      throw new Error(`不正なトークン: ${tok}`);
+      throw new Error(t("form.badToken", { token: tok }));
     });
-    setPreview("OK: トークン妥当性チェックを通過しました（MVP）");
+    setPreview(t("form.tokensOk"));
   }catch(err){
-    setPreview("エラー: " + err.message);
+    setPreview(t("form.errorPrefix") + err.message);
   }
 }
 function setPreview(msg){
@@ -706,7 +657,7 @@ async function onFileInput(e){
     }
   } catch (error) {
     console.error('File input error:', error);
-    alert(`ファイル選択エラー: ${error.message}`);
+    alert(t("toast.fileError", { message: error.message }));
   }
 }
 async function onDrop(e){
@@ -721,13 +672,13 @@ async function onDrop(e){
     }
   } catch (error) {
     console.error('File drop error:', error);
-    alert(`ファイルドロップエラー: ${error.message}`);
+    alert(t("toast.dropError", { message: error.message }));
   }
 }
 async function openFile(file){
   if (!file) {
     console.error('No file provided to openFile');
-    alert('ファイルが指定されていません');
+    alert(t("toast.noFile"));
     return;
   }
   
@@ -739,7 +690,7 @@ async function openFile(file){
   const progressWrap = qs("#progressWrap");
   if (progressWrap) progressWrap.hidden = false;
   setProgress(0);
-  showLoading(`ファイル読み込み中: ${file.name}`);
+  showLoading(t("toast.reading", { name: file.name }));
   
   try {
     STATE.file = file;
@@ -747,7 +698,7 @@ async function openFile(file){
     // Enhanced file reading with chunking for better performance
     const buffer = await readFileWithChunking(file);
     if (!buffer) {
-      throw new Error('ファイルの読み込みに失敗しました (バッファが空です)');
+      throw new Error(t("toast.emptyBuffer"));
     }
     STATE.buffer = buffer;
     
@@ -760,7 +711,7 @@ async function openFile(file){
     // Clear previous state first
     STATE.hits = [];
     renderHits([]);
-    setProgress(100, `読み込み完了`);
+    setProgress(100, t("toast.readDone"));
     
     // Progressive HEX view initialization based on file size
     await initializeHexViewProgressive(file, buffer);
@@ -768,10 +719,10 @@ async function openFile(file){
     // Small delay to show completion
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    toast(`読み込み完了: ${file.name} (${file.size.toLocaleString()} bytes)`);
+    toast(t("toast.readDoneDetail", { name: file.name, bytes: file.size.toLocaleString() }));
   } catch(err) {
     console.error('File loading error:', err);
-    alert(`ファイル読み込みエラー: ${err.message}`);
+    alert(t("toast.readError", { message: err.message }));
   } finally {
     if (dropArea) dropArea.classList.remove("loading");
     hideLoading();
@@ -783,12 +734,12 @@ async function openFile(file){
 function readFileWithChunking(file) {
   return new Promise((resolve, reject) => {
     if (!file) {
-      reject(new Error('ファイルが指定されていません'));
+      reject(new Error(t("toast.noFile")));
       return;
     }
     
     if (file.size === 0) {
-      reject(new Error('ファイルサイズが0バイトです'));
+      reject(new Error(t("toast.zeroSize")));
       return;
     }
     
@@ -816,7 +767,7 @@ function readFileWithChunking(file) {
           position += chunk.byteLength;
         }
         
-        setProgress(100, `読み込み完了`);
+        setProgress(100, t("toast.readDone"));
         resolve(combined.buffer);
         return;
       }
@@ -854,35 +805,17 @@ function readFileStandard(file) {
     const reader = new FileReader();
     let hasProgressEvents = false;
     
-    // Enhanced progress simulation
-    const simulateProgress = () => {
-      let progress = 0;
-      const increment = file.size > 10 * 1024 * 1024 ? 3 : 12; // Smoother for large files
-      const interval = setInterval(() => {
-        if (hasProgressEvents) {
-          clearInterval(interval);
-          return;
-        }
-        
-        progress += increment + Math.random() * 5;
-        if (progress >= 95) {
-          progress = 95;
-          clearInterval(interval);
-        }
-        
-        const loaded = (file.size * progress / 100 / 1024 / 1024).toFixed(1);
-        const total = (file.size / 1024 / 1024).toFixed(1);
-        setProgress(progress, `${loaded}MB / ${total}MB`);
-      }, 30);
-      
-      return interval;
-    };
-    
+    // 実際の読み込み量が取れないときは、割合を作らずに「読み込み中」とだけ出す。
+    // 以前は乱数で進むバーを見せており、実際の進み具合と関係がなかった。
+    const simulateProgress = () => setInterval(() => {
+      if (!hasProgressEvents) setProgress(null, t("toast.loading"));
+    }, 200);
+
     const progressInterval = simulateProgress();
     
     reader.onload = (e) => {
       clearInterval(progressInterval);
-      setProgress(100, `読み込み完了`);
+      setProgress(100, t("toast.readDone"));
       resolve(e.target.result);
     };
     
@@ -909,16 +842,16 @@ function readFileStandard(file) {
 
 /* ------------ Scan ------------ */
 function startScan(){
-  if (!STATE.buffer){ alert("先にファイルを読み込みます"); return; }
-  if (STATE.worker){ alert("スキャン中です"); return; }
+  if (!STATE.buffer){ alert(t("toast.needFile")); return; }
+  if (STATE.worker){ alert(t("toast.scanning")); return; }
   const scope = qs("#scanRange").value;
   const entries = STATE.dict.entries.filter(e => e.enabled !== false && e.pattern && e.offset);
-  if (!entries.length){ alert("有効なシグネチャがありません"); return; }
+  if (!entries.length){ alert(t("toast.noEnabled")); return; }
   
   // Auto-adjust scan scope for large files
   const fileSize = STATE.buffer.byteLength;
   if (fileSize > 100 * 1024 * 1024 && scope === "full") {
-    if (!confirm(`ファイルサイズが ${(fileSize/1024/1024).toFixed(1)}MB です。全文スキャンは時間がかかる可能性があります。続行しますか？`)) {
+    if (!confirm(t("toast.confirmFull", { mb: (fileSize/1024/1024).toFixed(1) }))) {
       return;
     }
   }
@@ -926,29 +859,38 @@ function startScan(){
   // Show loading state
   qs("#startScanBtn").classList.add("loading");
   
-  // Slice per scope (MVP: simple)
-  let buffer = STATE.buffer;
-  if (scope === "head64") buffer = STATE.buffer.slice(0, Math.min(64*1024*1024, STATE.buffer.byteLength));
-  if (scope === "head128") buffer = STATE.buffer.slice(0, Math.min(128*1024*1024, STATE.buffer.byteLength));
-  if (scope === "headTail") {
-    const h = STATE.buffer.slice(0, Math.min(64*1024*1024, STATE.buffer.byteLength));
-    const t = STATE.buffer.slice(Math.max(0, STATE.buffer.byteLength - 64*1024*1024));
-    // Combine for simplicity in MVP
-    const combined = new Uint8Array(h.byteLength + t.byteLength);
-    combined.set(new Uint8Array(h), 0);
-    combined.set(new Uint8Array(t), h.byteLength);
-    buffer = combined.buffer;
+  // 走査する区間を決める。区間ごとに実座標（base）を持たせるので、
+  // 末尾側のヒットもファイルの実座標のまま報告できる。
+  // 以前は先頭と末尾を1本に連結していたため、末尾側の位置がずれていた。
+  const HEAD_64 = 64 * 1024 * 1024;
+  const HEAD_128 = 128 * 1024 * 1024;
+  const total = STATE.buffer.byteLength;
+
+  let segments;
+  if (scope === "head64") {
+    segments = [{ buffer: STATE.buffer.slice(0, Math.min(HEAD_64, total)), base: 0 }];
+  } else if (scope === "head128") {
+    segments = [{ buffer: STATE.buffer.slice(0, Math.min(HEAD_128, total)), base: 0 }];
+  } else if (scope === "headTail") {
+    const headLen = Math.min(HEAD_64, total);
+    const tailStart = Math.max(headLen, total - HEAD_64);
+    segments = [{ buffer: STATE.buffer.slice(0, headLen), base: 0 }];
+    if (tailStart < total) {
+      segments.push({ buffer: STATE.buffer.slice(tailStart), base: tailStart });
+    }
+  } else {
+    segments = [{ buffer: STATE.buffer, base: 0 }];
   }
 
   // Start worker
   STATE.worker = new Worker("js/worker.js");
   STATE.worker.onmessage = onScanMessage;
-  STATE.worker.postMessage({cmd:"scan", buffer, signatures:entries, options:{}});
-  
+  STATE.worker.postMessage({ cmd: "scan", fileSize: total, segments, signatures: entries });
+
   qs("#startScanBtn").disabled = true;
   qs("#cancelScanBtn").disabled = false;
   qs("#progressWrap").hidden = false;
-  setProgress(0, `スキャン開始 (${entries.length}個のシグネチャ)`);
+  setProgress(0, t("toast.scanStart", { count: entries.length }));
 }
 
 function cancelScan(){
@@ -966,22 +908,25 @@ function onScanMessage(e){
   const {type, progress, hits, error} = e.data;
   if (type === "progress"){
     const totalSigs = STATE.dict.entries.filter(e => e.enabled !== false && e.pattern && e.offset).length;
-    setProgress(progress, `スキャン中 (${totalSigs}個のシグネチャ)`);
+    setProgress(progress, t("toast.scanProgress", { count: totalSigs }));
   }
   if (type === "done"){
     STATE.hits = hits || [];
-    console.log('Received hits from worker:', STATE.hits);
+    STATE.scanSkipped = e.data.skipped || null;
+    STATE.trailerChecked = e.data.trailerChecked !== false;
+    debugLog('Received hits from worker:', STATE.hits);
     renderHits(STATE.hits);
     
     // Update file info with scan results
     updateFileInfoWithScanResults(STATE.hits);
     
     // Show completion animation
-    setProgress(100, `完了: ${STATE.hits.length}件のヒット`);
+    setProgress(100, t("toast.scanDone", { count: STATE.hits.length }));
     
     setTimeout(() => {
       cancelScan();
-      toast(`スキャン完了: ${STATE.hits.length} 件のヒット`);
+      toast(t("toast.scanDoneDetail", { count: STATE.hits.length }));
+      reportSkipped(STATE.scanSkipped, STATE.trailerChecked);
       
       // Flash hit count if there are hits
       if (STATE.hits.length > 0) {
@@ -992,21 +937,26 @@ function onScanMessage(e){
     }, 300);
   }
   if (type === "error"){
-    alert(`スキャンエラー: ${error}`);
+    alert(t("toast.scanError", { message: error }));
     cancelScan();
   }
 }
 
 function setProgress(p, text){
-  const pct = Math.min(100, Math.max(0, p));
-  console.log(`Progress update: ${pct.toFixed(1)}% - ${text || 'no text'}`);
-  qs("#progressBar").style.width = `${pct}%`;
+  const bar = qs("#progressBar");
   const progressText = qs("#progressText");
-  if (text) {
-    progressText.textContent = `${text} (${Math.round(pct)}%)`;
-  } else {
-    progressText.textContent = `${Math.round(pct)}%`;
+
+  // p が null のときは割合が分からない。数字を作らず、動いていることだけを見せる
+  if (p === null || typeof p === "undefined") {
+    bar.classList.add("indeterminate");
+    progressText.textContent = text || t("toast.processing");
+    return;
   }
+
+  bar.classList.remove("indeterminate");
+  const pct = Math.min(100, Math.max(0, p));
+  bar.style.width = `${pct}%`;
+  progressText.textContent = text ? `${text} (${Math.round(pct)}%)` : `${Math.round(pct)}%`;
 }
 
 // Generate descriptive note for hit based on signature name
@@ -1014,64 +964,85 @@ function generateHitNote(signatureName, offset, confidence) {
   if (!signatureName) return "";
   
   const name = signatureName.toLowerCase();
-  const offsetText = offset === 0 ? "ファイル先頭" : `オフセット0x${offset.toString(16)}`;
+  const offsetText = offset === 0 ? t("note.headStart") : t("note.atOffset", { hex: offset.toString(16) });
   
   // File format specific notes
   if (name.includes('jpeg') || name.includes('jpg')) {
-    if (name.includes('soi')) return "JPEG画像の開始マーカー";
-    if (name.includes('eoi')) return "JPEG画像の終了マーカー"; 
-    if (name.includes('exif')) return "JPEG Exifメタデータ";
-    return "JPEG画像関連のデータ";
+    if (name.includes('soi')) return t("fmt.jpegSoi");
+    if (name.includes('eoi')) return t("fmt.jpegEoi");
+    if (name.includes('exif')) return t("fmt.jpegExif");
+    return t("fmt.jpegOther");
   }
   
   if (name.includes('png')) {
-    if (name.includes('ihdr')) return "PNG画像ヘッダー";
-    if (name.includes('iend')) return "PNG画像終了";
-    return "PNG画像データ";
+    if (name.includes('ihdr')) return t("fmt.pngHeader");
+    if (name.includes('iend')) return t("fmt.pngEnd");
+    return t("fmt.pngData");
   }
   
   if (name.includes('gif')) {
-    if (name.includes('87a') || name.includes('89a')) return "GIF画像ヘッダー";
-    return "GIF画像データ";
+    if (name.includes('87a') || name.includes('89a')) return t("fmt.gifHeader");
+    return t("fmt.gifData");
   }
   
-  if (name.includes('pdf')) return "PDFドキュメント";
-  if (name.includes('zip')) return "ZIP圧縮アーカイブ";
-  if (name.includes('rar')) return "RAR圧縮アーカイブ";
-  if (name.includes('7z')) return "7-Zip圧縮アーカイブ";
+  if (name.includes('pdf')) return t("fmt.pdf");
+  if (name.includes('zip')) return t("fmt.zip");
+  if (name.includes('rar')) return t("fmt.rar");
+  if (name.includes('7z')) return t("fmt.sevenZip");
   
-  if (name.includes('mp3')) return "MP3音声ファイル";
-  if (name.includes('mp4')) return "MP4動画/音声ファイル";
-  if (name.includes('avi')) return "AVI動画ファイル";
+  if (name.includes('mp3')) return t("fmt.mp3");
+  if (name.includes('mp4')) return t("fmt.mp4");
+  if (name.includes('avi')) return t("fmt.avi");
   
-  if (name.includes('exe') || name.includes('pe')) return "Windows実行ファイル";
-  if (name.includes('elf')) return "Linux実行ファイル";
-  if (name.includes('mach-o')) return "macOS実行ファイル";
+  if (name.includes('exe') || name.includes('pe')) return t("fmt.exe");
+  if (name.includes('elf')) return t("fmt.elf");
+  if (name.includes('mach-o')) return t("fmt.macho");
   
-  if (name.includes('office') || name.includes('docx') || name.includes('xlsx')) return "Microsoft Officeドキュメント";
-  if (name.includes('rtf')) return "リッチテキスト文書";
-  if (name.includes('xml')) return "XML文書データ";
-  if (name.includes('html')) return "HTML文書";
+  if (name.includes('office') || name.includes('docx') || name.includes('xlsx')) return t("fmt.office");
+  if (name.includes('rtf')) return t("fmt.rtf");
+  if (name.includes('xml')) return t("fmt.xml");
+  if (name.includes('html')) return t("fmt.html");
   
-  if (name.includes('bmp')) return "Bitmap画像";
-  if (name.includes('tiff')) return "TIFF画像";
-  if (name.includes('ico')) return "Windowsアイコン";
+  if (name.includes('bmp')) return t("fmt.bmp");
+  if (name.includes('tiff')) return t("fmt.tiff");
+  if (name.includes('ico')) return t("fmt.ico");
   
-  if (name.includes('tar')) return "TAR形式アーカイブ";
-  if (name.includes('gzip')) return "GZIP圧縮データ";
+  if (name.includes('tar')) return t("fmt.tar");
+  if (name.includes('gzip')) return t("fmt.gzip");
   
   // Confidence based general notes
-  if (confidence >= 90) return `高信頼度の${offsetText}でのパターン検出`;
-  if (confidence >= 70) return `${offsetText}でのパターン一致`;
-  if (confidence >= 50) return `可能性あり：${offsetText}`;
+  if (confidence >= 90) return t("note.highConfidence", { where: offsetText });
+  if (confidence >= 70) return t("note.match", { where: offsetText });
+  if (confidence >= 50) return t("note.maybe", { where: offsetText });
   
-  return `${offsetText}でのシグネチャ検出`;
+  return t("note.detected", { where: offsetText });
+}
+
+/**
+ * 走査で落としたものを黙って捨てず、件数と理由を伝える。
+ * 末尾を見られない範囲の走査では、トレーラーを要求するシグネチャを
+ * ヒットさせないので、その旨も伝える。
+ */
+function reportSkipped(skipped, trailerChecked){
+  if (!skipped) return;
+  const messages = [];
+  if (!trailerChecked && skipped.trailerUnverifiable > 0) {
+    messages.push(t("toast.skipTrailer", { count: skipped.trailerUnverifiable }));
+  }
+  if (skipped.outOfSize > 0) {
+    messages.push(t("toast.skipSize", { count: skipped.outOfSize }));
+  }
+  const invalid = skipped.invalidPattern || [];
+  if (invalid.length > 0) {
+    messages.push(t("toast.skipInvalid", { count: invalid.length, name: invalid[0].name }));
+  }
+  for (const message of messages) toast(message);
 }
 
 function renderHits(hits){
   const tbody = qs("#hitsTbody");
   if (!hits.length){
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">ヒットなし</td></tr>`;
+    tbody.replaceChildren(el("tr", {}, [el("td", { colspan: "6", class: "muted", text: t("hits.none") })]));
     STATE.hex.setHighlights([]);
     STATE.selectedHitIndex = null;
     return;
@@ -1083,7 +1054,7 @@ function renderHits(hits){
   }
   
   const rows = hits.map((h,i)=>{
-    console.log(`Rendering hit ${i}:`, {name: h.name, offset: h.offset, length: h.length, confidence: h.confidence});
+    debugLog(`Rendering hit ${i}:`, {name: h.name, offset: h.offset, length: h.length, confidence: h.confidence});
     let offsetDisplay = 'undefined';
     if (typeof h.offset === 'number' && !isNaN(h.offset) && h.offset >= 0) {
       offsetDisplay = `0x${h.offset.toString(16).padStart(8, '0').toUpperCase()}`;
@@ -1095,12 +1066,24 @@ function renderHits(hits){
     const selectedClass = isSelected ? ' class="selected"' : '';
     
     const noteText = h.notes || generateHitNote(h.name, h.offset, h.confidence);
+
+    // 終端の並びを照合した結果。
+    // 「あるはずの終端が見つからない」ことこそ、壊れたファイルの手がかりになる
+    const trailerLabels = {
+      found: t("hits.trailerFound"),
+      missing: t("hits.trailerMissing"),
+      unchecked: t("hits.trailerUnchecked"),
+      none: "－"
+    };
+    const trailerLabel = trailerLabels[h.trailerState] || "－";
+    const trailerClass = h.trailerState === "missing" ? "trailer-missing" : "";
     
     return `<tr data-index="${i}"${selectedClass}>
       <td>${escapeHtml(h.name||"")}</td>
       <td>${offsetDisplay}</td>
       <td>${h.length||"-"}</td>
       <td>${h.confidence||"-"}</td>
+      <td class="hit-trailer ${trailerClass}">${escapeHtml(trailerLabel)}</td>
       <td class="hit-note">${escapeHtml(noteText)}</td>
     </tr>`;
   }).join("");
@@ -1220,47 +1203,98 @@ function exportJson(entries){
 }
 
 function exportForemost(entries){
-  // Simplified foremost.conf format
-  let conf = "# Foremost configuration file (generated)\n\n";
+  const lines = [
+    t("foremost.header1"),
+    t("foremost.header2"),
+    ""
+  ];
+  const skipped = [];
+
   entries.forEach(e => {
     if (!e.pattern || !e.extensions?.length) return;
-    const ext = e.extensions[0];
-    const header = e.pattern.replace(/\s+/g, "").toLowerCase();
-    const footer = e.trailer ? e.trailer.replace(/\s+/g, "").toLowerCase() : "";
-    const size = e.max_size || 20000000;
-    conf += `${ext}\ty\t${size}\t\\x${header}`;
-    if (footer) conf += `\t\\x${footer}`;
-    conf += "\n";
+
+    const header = toForemostBytes(e.pattern);
+    if (header.error) {
+      // 範囲指定は foremost に対応する書き方がない。黙って壊れた行を出さない
+      skipped.push(t("foremost.headerError", { name: e.name || e.extensions[0], error: describeIssue(header.error) }));
+      return;
+    }
+
+    let line = `${e.extensions[0]}\ty\t${e.max_size || 20000000}\t${header.value}`;
+
+    if (e.trailer) {
+      const footer = toForemostBytes(e.trailer);
+      if (footer.error) {
+        skipped.push(t("foremost.trailerError", { name: e.name || e.extensions[0], error: describeIssue(footer.error) }));
+        return;
+      }
+      line += `\t${footer.value}`;
+    }
+
+    lines.push(line);
   });
-  const blob = new Blob([conf], {type: "text/plain"});
+
+  const blob = new Blob([lines.join("\n") + "\n"], {type: "text/plain"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = "foremost.conf";
   a.click();
   URL.revokeObjectURL(url);
+
+  if (skipped.length > 0) {
+    toast(t("toast.foremostSkipped", { count: skipped.length, sample: skipped[0] }));
+  }
 }
 
 async function onImport(){
   const file = qs("#importFile").files?.[0];
   if (!file) return;
   
-  showLoading(`辞書をインポート中: ${file.name}`);
+  showLoading(t("toast.importing", { name: file.name }));
   
   try {
     const text = await file.text();
+    const firstBody = text.trim().split(/\r?\n/).find((l) => l.trim() && !l.trim().startsWith("#")) || "";
+    const isConf = /\.conf$/i.test(file.name) || !firstBody.startsWith("{");
     await new Promise(resolve => setTimeout(resolve, 200)); // Show animation
     
+    // foremost.conf も読めるようにした。
+    // UIとREADMEは以前から .conf 対応を謳っていたが、実装は JSON.parse だけで、
+    // .conf を選ぶと必ず「インポートエラー」になっていた。
+    if (isConf) {
+      const { accepted, errors } = parseForemostConf(text);
+      if (accepted.length > 0) {
+        mergeEntries(validateEntries(accepted).accepted, qs("#mergePolicy").value);
+        renderSigTable();
+        saveLocal();
+      }
+      toast(t("toast.importDone", { count: accepted.length }));
+      if (errors.length > 0) toast(t("toast.importLineErrors", { count: errors.length, sample: describeIssue(errors[0]) }));
+      return;
+    }
+
     const data = JSON.parse(text);
     if (data.entries && Array.isArray(data.entries)){
       const policy = qs("#mergePolicy").value;
-      mergeEntries(data.entries, policy);
-      renderSigTable();
-      saveLocal();
-      toast(`インポート完了: ${data.entries.length} 件`);
+      const { accepted, errors } = validateEntries(data.entries);
+
+      if (accepted.length > 0) {
+        mergeEntries(accepted, policy);
+        renderSigTable();
+        saveLocal();
+      }
+      toast(t("toast.importDone", { count: accepted.length }));
+
+      // 落ちたものは黙って捨てず、件数と理由の例を伝える
+      if (errors.length > 0) {
+        toast(t("toast.importItemErrors", { count: errors.length, sample: describeIssue(errors[0]) }));
+      }
+    } else {
+      throw new Error(t("toast.noEntries"));
     }
   } catch(err) {
-    alert(`インポートエラー: ${err.message}`);
+    alert(t("toast.importError", { message: err.message }));
   } finally {
     hideLoading();
   }
@@ -1311,7 +1345,7 @@ function saveLocal(){
 
 function toast(msg){
   // Simple console log for MVP
-  console.log(`[Toast] ${msg}`);
+  debugLog(`[Toast] ${msg}`);
 }
 
 function escapeHtml(str){
@@ -1321,7 +1355,8 @@ function escapeHtml(str){
 }
 
 /* ------------ Loading UI ------------ */
-function showLoading(text = "処理中..."){
+function showLoading(text){
+  text = text || t("loading.text");
   const overlay = qs("#loadingOverlay");
   const loadingText = qs("#loadingText");
   loadingText.textContent = text;
@@ -1371,12 +1406,12 @@ async function initializeHexViewProgressive(file, buffer) {
     setTimeout(() => {
       if (STATE.file === file) { // Ensure file hasn't changed
         STATE.hex.setBuffer(buffer);
-        console.log('Full HEX view loaded for large file');
+        debugLog('Full HEX view loaded for large file');
       }
     }, 1000);
   } else { // > 100MB: very conservative approach
     showPartialHexView(buffer, 1024 * 1024); // Show first 1MB only
-    console.log('Large file detected - showing partial HEX view only');
+    debugLog('Large file detected - showing partial HEX view only');
   }
 }
 
@@ -1388,12 +1423,15 @@ function showPartialHexView(buffer, maxBytes) {
   if (maxBytes < buffer.byteLength) {
     const infoElement = document.createElement('div');
     infoElement.className = 'hex-partial-info';
-    infoElement.innerHTML = `
-      <div style="background: var(--warning-bg); color: var(--warning-fg); padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px;">
-        📝 大容量ファイルのため、先頭 ${(maxBytes/1024/1024).toFixed(1)}MB のみ表示中
-        <button onclick="this.parentElement.parentElement.remove(); STATE.hex.setBuffer(STATE.buffer);" style="margin-left: 8px; font-size: 11px;">全体を表示</button>
-      </div>
-    `;
+    const banner = el("div", { class: "hex-partial-banner" }, [
+      document.createTextNode(t("hex.partialBanner", { mb: (maxBytes/1024/1024).toFixed(1) })),
+      el("button", { class: "btn btn-sm", type: "button", text: t("hex.showAll") })
+    ]);
+    banner.querySelector("button").addEventListener("click", () => {
+      infoElement.remove();
+      STATE.hex.setBuffer(STATE.buffer);
+    });
+    infoElement.replaceChildren(banner);
     
     const hexView = qs('#hexView');
     hexView.insertBefore(infoElement, hexView.firstChild);

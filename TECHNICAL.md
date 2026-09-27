@@ -151,49 +151,56 @@ self.onmessage = function(e) {
 
 ## 🔍 シグネチャ検索アルゴリズム
 
-### Boyer-Moore風効率化
-```javascript
-function findSignatureMatches(buffer, signatures) {
-  const results = [];
-  
-  for (const sig of signatures) {
-    if (!sig.enabled) continue;
-    
-    const pattern = parseHexPattern(sig.pattern);
-    const matches = boyerMooreSearch(buffer, pattern);
-    
-    for (const offset of matches) {
-      results.push({
-        name: sig.name,
-        offset: offset,
-        length: pattern.length,
-        confidence: sig.confidence || 80
-      });
-    }
-  }
-  
-  return results.sort((a, b) => a.offset - b.offset);
-}
-```
+### 照合の作り
 
-### ワイルドカード対応
+Boyer-Moore は使っていない。パターンごとに、走査対象の全位置を順に見る素朴な照合である。
+シグネチャのほとんどが数バイトで、`??` や `[00-1F]` を含むため、
+スキップ表を作る手間に見合う速さが出ないと判断した（20MB・181件で約0.6秒。「パフォーマンス計測」を参照）。
+
+パターンは、照合の前に3種類の部品へ変換する。
+
 ```javascript
-function parseHexPattern(pattern) {
-  return pattern.split(' ').map(byte => {
-    if (byte === '??') return null; // ワイルドカード
-    return parseInt(byte, 16);
+// js/worker.js
+function compileParts(pattern) {
+  const toks = (pattern || "").trim().split(/\s+/).filter(Boolean);
+  if (toks.length === 0) throw ...;
+  return toks.map((tok) => {
+    if (/^\?\?$/.test(tok)) return { kind: "any" };                       // 任意の1バイト
+    const mRange = tok.match(/^\[([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})\]$/);
+    if (mRange) return { kind: "range", lo: ..., hi: ... };               // 範囲
+    if (/^[0-9A-Fa-f]{2}$/.test(tok)) return { kind: "byte", val: ... };  // 固定
+    throw ...;                                                            // それ以外は受け付けない
   });
 }
-
-function matchesPattern(buffer, offset, pattern) {
-  for (let i = 0; i < pattern.length; i++) {
-    if (pattern[i] !== null && buffer[offset + i] !== pattern[i]) {
-      return false;
-    }
-  }
-  return true;
-}
 ```
+
+照合は `matchAt(view, c, pos, base, hits, context)` で行う。区間の中の位置 `pos` で合わせ、
+報告するときは `base` を足して実座標に直す。「先頭＋末尾」の走査で末尾側のヒットが
+区間の先頭からの値になる不具合は、この `base` で解消している。
+
+### オフセットの種類
+
+| 種類 | 動き |
+|------|------|
+| `absolute` | ファイル先頭から `value` バイトの位置だけを見る |
+| `relative` | `from` で指したシグネチャのヒット位置に `delta` を足した位置を見る |
+| 指定なし | 走査した範囲の全位置を順に見る |
+
+### 終端（トレーラー）の扱い
+
+`trailer` を持つシグネチャは、ファイル末尾の並びも照合し、結果を `trailerState` として返す。
+
+| 値 | 意味 |
+|----|------|
+| `found` | 終端の並びがあった |
+| `missing` | 期待した終端が無い（途中で切れた可能性） |
+| `unchecked` | 末尾を読まない範囲の走査なので判定していない |
+| `none` | このシグネチャは終端を持たない |
+
+**終端が無いことを理由にヒットを取り消すのは、`requires_trailer` を立てたものだけである。**
+既定の辞書では JPEG (SOI) にも `trailer` が書かれており、一律に取り消すと
+「途中で切れたJPEG」が1件も検出されなくなる。壊れたファイルを見つけることこそが
+フォレンジックでの用途なので、既定では報告に留める。
 
 ## 🗄️ データ管理
 
@@ -228,17 +235,26 @@ class DictionaryManager {
 
 ## 🚀 パフォーマンス計測
 
-### 主要メトリクス
-- **ファイル読み込み**: ~100MB/秒（チャンク処理）
-- **シグネチャスキャン**: ~50MB/秒（244パターン）
-- **HEXビュー描画**: 60FPS（仮想スクロール）
-- **メモリ使用量**: <100MB（1GBファイル処理時）
+### 実測値
+
+20MBのファイル（ランダムな内容、先頭にJPEGのSOI、末尾にEOI）を、既定の辞書（有効な181件）で走査した。
+Playwright から Chromium（ヘッドレス）で測っている。
+
+| 項目 | 実測 |
+|------|------|
+| 読み込み＋MD5/SHA1/SHA256 | 624 ms |
+| 走査 | 571 ms（約35MB/秒） |
+| 検出 | 3件 |
+
+- 環境で変わる数字なので、目安として読むこと。
+- ハッシュは Web Crypto（SHA1/SHA256）と自前のMD5で、走査とは別に進む。
+- メモリ使用量とHEXビューのフレームレートは測っていないため、ここには書かない。
 
 ### 最適化ポイント
-1. **CSS Containment** でレンダリング最適化
-2. **RequestIdleCallback** でフレーム間処理
-3. **GPU加速** でスムーズなアニメーション
-4. **WebAssembly検討** - 将来的な高速化
+1. **CSS containment** で、大きな表とHEXビューの再描画範囲を狭める
+2. **requestIdleCallback** で、ハッシュとエントロピーの計算を空き時間へ回す
+3. **仮想スクロール** で、表示している行だけをDOMに置く
+4. **Web Worker** で、走査を別スレッドへ出す
 
 ## 🔒 セキュリティ考慮事項
 
@@ -247,36 +263,47 @@ class DictionaryManager {
 - **CORS準拠** - 必要最小限のリソースアクセス
 - **XSS対策** - innerHTML使用時の適切なエスケープ
 
-### ファイル処理安全性
-```javascript
-// ファイルサイズ制限
-const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
+### ファイル処理
 
-function validateFile(file) {
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error('ファイルサイズが上限を超えています');
-  }
-  
-  // MIME type validation（必要に応じて）
-  const allowedTypes = ['application/octet-stream', ...];
-  if (!allowedTypes.includes(file.type)) {
-    console.warn('未対応のMIME type:', file.type);
-  }
+ファイルサイズの上限は設けていない。代わりに、走査する範囲を利用者が選ぶ。
+
+```javascript
+// 走査の範囲は 先頭64MB / 先頭128MB / 先頭＋末尾 / 全文 から選ぶ。
+// 「先頭＋末尾」は2つの区間を、それぞれの実座標（base）を添えて Worker へ渡す。
+// base を持たせないと、末尾側のヒットのオフセットが区間の先頭からの値になってしまう。
+worker.postMessage({ cmd: "scan", fileSize, segments: [{ buffer, base }], signatures });
+
+// 全文を選んだとき、100MBを超えるファイルでは時間がかかる旨を確かめる
+if (fileSize > 100 * 1024 * 1024 && scope === "full") {
+  if (!confirm(t("toast.confirmFull", { mb: (fileSize/1024/1024).toFixed(1) }))) return;
 }
 ```
 
-## 🧪 テスト戦略
+旧版のこの節には `MAX_FILE_SIZE` と `validateFile()` のコードが載っていたが、実装には無い。
+MIME type による絞り込みも行っていない。拡張子やMIME typeを信じないことがこのツールの主旨なので、
+読み込む側で MIME type を見て弾く作りにはしない。
 
-### 単体テスト対象
-- シグネチャマッチング関数
-- ハッシュ計算関数  
-- ファイル読み込み関数
-- UI状態管理関数
+## 🧪 テスト
 
-### 統合テスト
-- ファイルアップロード→解析→表示フロー
-- 辞書編集→保存→読み込みフロー
-- レスポンシブUI動作確認
+依存パッケージを増やさず、Node 同梱の `node --test` で回す。
+
+```bash
+npm test
+```
+
+| ファイル | 見るもの |
+|----------|----------|
+| `test/scan.test.js` | 走査、終端の照合、相対オフセット、サイズの条件、読めないパターンを飛ばす動き |
+| `test/dict.test.js` | インポートした辞書の検証（知らない項目を持ち越さないことを含む） |
+| `test/foremost.test.js` | foremost.conf の読み書き。範囲指定は扱えないと返すこと |
+| `test/i18n.test.js` | 日英でキーの集合と差し込みが一致すること、HTMLとスクリプトが指すキーが辞書にあること |
+
+Worker は素のスクリプトなので、`new Function` で読み込んで関数を取り出す（`test/helper.js`）。
+`i18n.js` も同じ方法で読むため、`window` も `localStorage` も無い環境で読めることが、
+このテスト自体で確かめられている。
+
+ブラウザーでしか確かめられないもの（配色のコントラスト、タップ領域、狭い画面での折り返し、
+CSP違反の有無）は、Playwright で状態を作ってから測っている。自動テストには入れていない。
 
 ## 📊 メモリ管理
 

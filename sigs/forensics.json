@@ -5,10 +5,15 @@
     {
       "id": "sig-ntfs-mft",
       "name": "NTFS Master File Table",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "46 49 4C 45 30 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "NTFS MFT record header",
       "enabled": true
@@ -16,10 +21,15 @@
     {
       "id": "sig-fat32-boot",
       "name": "FAT32 Boot Sector",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "EB ?? 90 ?? ?? ?? ?? ?? ?? ?? ?? 00 02",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 85,
       "notes": "FAT32 filesystem boot sector",
       "enabled": true
@@ -27,10 +37,15 @@
     {
       "id": "sig-ext4-superblock",
       "name": "EXT4 Superblock",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "53 EF",
-      "offset": { "type": "absolute", "value": 1080 },
+      "offset": {
+        "type": "absolute",
+        "value": 1080
+      },
       "confidence": 90,
       "notes": "Linux EXT4 filesystem superblock",
       "enabled": true
@@ -38,10 +53,15 @@
     {
       "id": "sig-apfs-superblock",
       "name": "APFS Superblock",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "4E 58 53 42",
-      "offset": { "type": "absolute", "value": 32 },
+      "offset": {
+        "type": "absolute",
+        "value": 32
+      },
       "confidence": 95,
       "notes": "Apple File System superblock",
       "enabled": true
@@ -49,10 +69,15 @@
     {
       "id": "sig-hfs-plus",
       "name": "HFS+ Volume Header",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "48 2B",
-      "offset": { "type": "absolute", "value": 1024 },
+      "offset": {
+        "type": "absolute",
+        "value": 1024
+      },
       "confidence": 90,
       "notes": "macOS HFS+ filesystem volume header",
       "enabled": true
@@ -60,10 +85,15 @@
     {
       "id": "sig-mbr",
       "name": "Master Boot Record",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "55 AA",
-      "offset": { "type": "absolute", "value": 510 },
+      "offset": {
+        "type": "absolute",
+        "value": 510
+      },
       "confidence": 85,
       "notes": "MBR boot signature",
       "enabled": true
@@ -71,10 +101,15 @@
     {
       "id": "sig-gpt-header",
       "name": "GPT Header",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "45 46 49 20 50 41 52 54",
-      "offset": { "type": "absolute", "value": 512 },
+      "offset": {
+        "type": "absolute",
+        "value": 512
+      },
       "confidence": 95,
       "notes": "GUID Partition Table header",
       "enabled": true
@@ -82,10 +117,15 @@
     {
       "id": "sig-registry-hive-sam",
       "name": "Windows SAM Hive",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "72 65 67 66",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "Windows Security Account Manager registry hive",
       "enabled": true
@@ -93,10 +133,15 @@
     {
       "id": "sig-usnjrnl",
       "name": "NTFS USN Journal",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "55 53 4E 4A 52 4E 4C",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "NTFS Update Sequence Number Journal",
       "enabled": true
@@ -104,10 +149,15 @@
     {
       "id": "sig-logfile",
       "name": "NTFS LogFile",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "52 53 54 52",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "NTFS transaction log file",
       "enabled": true
@@ -115,10 +165,15 @@
     {
       "id": "sig-hiberfil",
       "name": "Windows Hibernation File",
-      "extensions": ["sys"],
+      "extensions": [
+        "sys"
+      ],
       "category": "other",
       "pattern": "68 69 62 72",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "Windows hiberfil.sys",
       "enabled": true
@@ -126,10 +181,15 @@
     {
       "id": "sig-pagefile",
       "name": "Windows Page File",
-      "extensions": ["sys"],
+      "extensions": [
+        "sys"
+      ],
       "category": "other",
       "pattern": "70 61 67 65",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "Windows pagefile.sys",
       "enabled": true
@@ -137,10 +197,15 @@
     {
       "id": "sig-swapfile",
       "name": "Windows Swap File",
-      "extensions": ["sys"],
+      "extensions": [
+        "sys"
+      ],
       "category": "other",
       "pattern": "73 77 61 70",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "Windows swapfile.sys",
       "enabled": true
@@ -148,10 +213,15 @@
     {
       "id": "sig-memory-dump",
       "name": "Windows Memory Dump",
-      "extensions": ["dmp"],
+      "extensions": [
+        "dmp"
+      ],
       "category": "other",
       "pattern": "50 41 47 45 44 55 4D 50",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "Windows crash dump file",
       "enabled": true
@@ -159,10 +229,15 @@
     {
       "id": "sig-vmem",
       "name": "VMware Memory",
-      "extensions": ["vmem"],
+      "extensions": [
+        "vmem"
+      ],
       "category": "other",
       "pattern": "56 4D 45 4D",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "VMware virtual machine memory file",
       "enabled": true
@@ -170,10 +245,16 @@
     {
       "id": "sig-raw-memory",
       "name": "Raw Memory Dump",
-      "extensions": ["mem", "raw"],
+      "extensions": [
+        "mem",
+        "raw"
+      ],
       "category": "other",
       "pattern": "4D 5A",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 60,
       "notes": "Raw memory dump (PE header at start - low confidence)",
       "enabled": false
@@ -181,10 +262,15 @@
     {
       "id": "sig-jump-list",
       "name": "Windows Jump List",
-      "extensions": ["automaticDestinations-ms"],
+      "extensions": [
+        "automaticDestinations-ms"
+      ],
       "category": "other",
       "pattern": "D0 CF 11 E0 A1 B1 1A E1",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 80,
       "notes": "Windows jump list (OLE compound document)",
       "enabled": true
@@ -192,10 +278,15 @@
     {
       "id": "sig-recycle-bin",
       "name": "Windows Recycle Bin",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "24 49",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 85,
       "notes": "Windows recycle bin metadata file",
       "enabled": true
@@ -203,10 +294,15 @@
     {
       "id": "sig-firefox-places",
       "name": "Firefox Places Database",
-      "extensions": ["sqlite"],
+      "extensions": [
+        "sqlite"
+      ],
       "category": "other",
       "pattern": "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 70,
       "notes": "Firefox bookmarks/history database",
       "enabled": true
@@ -214,10 +310,15 @@
     {
       "id": "sig-chrome-cache",
       "name": "Chrome Cache Index",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "49 4E 44 58",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "Chrome browser cache index",
       "enabled": true
@@ -225,10 +326,15 @@
     {
       "id": "sig-safari-cache",
       "name": "Safari Cache",
-      "extensions": ["db"],
+      "extensions": [
+        "db"
+      ],
       "category": "other",
       "pattern": "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 65,
       "notes": "Safari cache database (SQLite)",
       "enabled": true
@@ -236,10 +342,15 @@
     {
       "id": "sig-edge-spartan",
       "name": "Microsoft Edge Database",
-      "extensions": ["edb"],
+      "extensions": [
+        "edb"
+      ],
       "category": "other",
       "pattern": "EF CD AB 89",
-      "offset": { "type": "absolute", "value": 4 },
+      "offset": {
+        "type": "absolute",
+        "value": 4
+      },
       "confidence": 90,
       "notes": "Edge browser database (ESE)",
       "enabled": true
@@ -247,10 +358,15 @@
     {
       "id": "sig-outlook-ost",
       "name": "Outlook OST",
-      "extensions": ["ost"],
+      "extensions": [
+        "ost"
+      ],
       "category": "other",
       "pattern": "21 42 44 4E",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "Microsoft Outlook offline storage",
       "enabled": true
@@ -258,10 +374,15 @@
     {
       "id": "sig-thunderbird-mbox",
       "name": "Thunderbird Mailbox",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "46 72 6F 6D 20",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 75,
       "notes": "Mozilla Thunderbird mbox format",
       "enabled": true
@@ -269,10 +390,15 @@
     {
       "id": "sig-eml",
       "name": "Email Message",
-      "extensions": ["eml"],
+      "extensions": [
+        "eml"
+      ],
       "category": "other",
       "pattern": "52 65 63 65 69 76 65 64 3A",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 80,
       "notes": "Email message file (Received: header)",
       "enabled": true
@@ -280,10 +406,15 @@
     {
       "id": "sig-msg",
       "name": "Outlook Message",
-      "extensions": ["msg"],
+      "extensions": [
+        "msg"
+      ],
       "category": "other",
       "pattern": "D0 CF 11 E0 A1 B1 1A E1",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 75,
       "notes": "Outlook message file (OLE compound document)",
       "enabled": true
@@ -291,10 +422,15 @@
     {
       "id": "sig-ios-keychain",
       "name": "iOS Keychain",
-      "extensions": ["keychain-db"],
+      "extensions": [
+        "keychain-db"
+      ],
       "category": "other",
       "pattern": "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 70,
       "notes": "iOS keychain database (SQLite)",
       "enabled": true
@@ -302,10 +438,15 @@
     {
       "id": "sig-android-contacts",
       "name": "Android Contacts",
-      "extensions": ["db"],
+      "extensions": [
+        "db"
+      ],
       "category": "other",
       "pattern": "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 65,
       "notes": "Android contacts database",
       "enabled": true
@@ -313,10 +454,16 @@
     {
       "id": "sig-whatsapp-db",
       "name": "WhatsApp Database",
-      "extensions": ["db", "crypt"],
+      "extensions": [
+        "db",
+        "crypt"
+      ],
       "category": "other",
       "pattern": "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 70,
       "notes": "WhatsApp chat database",
       "enabled": true
@@ -324,21 +471,31 @@
     {
       "id": "sig-signal-db",
       "name": "Signal Database",
-      "extensions": ["db"],
+      "extensions": [
+        "db"
+      ],
       "category": "other",
       "pattern": "53 51 4C 69 74 65 20 66 6F 72 6D 61 74 20 33 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 65,
       "notes": "Signal messenger database",
       "enabled": true
     },
     {
-      "id": "sig-bitcoin-wallet",
+      "id": "sig-bitcoin-wallet-forensics",
       "name": "Bitcoin Core Wallet",
-      "extensions": ["dat"],
+      "extensions": [
+        "dat"
+      ],
       "category": "other",
       "pattern": "62 31 05 00",
-      "offset": { "type": "absolute", "value": 12 },
+      "offset": {
+        "type": "absolute",
+        "value": 12
+      },
       "confidence": 90,
       "notes": "Bitcoin Core wallet.dat file",
       "enabled": true
@@ -346,10 +503,15 @@
     {
       "id": "sig-ethereum-keystore",
       "name": "Ethereum Keystore",
-      "extensions": ["json"],
+      "extensions": [
+        "json"
+      ],
       "category": "other",
       "pattern": "7B 22 61 64 64 72 65 73 73 22",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 85,
       "notes": "Ethereum wallet keystore file",
       "enabled": true
@@ -357,10 +519,15 @@
     {
       "id": "sig-monero-wallet",
       "name": "Monero Wallet",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "4D 6F 6E 65 72 6F",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "Monero wallet file",
       "enabled": true
@@ -368,10 +535,15 @@
     {
       "id": "sig-tor-state",
       "name": "Tor State File",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "23 20 54 6F 72 20 73 74 61 74 65 20 66 69 6C 65",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "Tor browser state file",
       "enabled": true
@@ -379,10 +551,15 @@
     {
       "id": "sig-encrypted-zip",
       "name": "Encrypted ZIP",
-      "extensions": ["zip"],
+      "extensions": [
+        "zip"
+      ],
       "category": "archive",
       "pattern": "50 4B 03 04 14 00 01 00",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 85,
       "notes": "Password-protected ZIP file",
       "enabled": true
@@ -390,10 +567,15 @@
     {
       "id": "sig-truecrypt",
       "name": "TrueCrypt Volume",
-      "extensions": ["tc"],
+      "extensions": [
+        "tc"
+      ],
       "category": "other",
       "pattern": "54 52 55 45",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "TrueCrypt encrypted volume",
       "enabled": true
@@ -401,10 +583,15 @@
     {
       "id": "sig-veracrypt",
       "name": "VeraCrypt Volume",
-      "extensions": ["hc"],
+      "extensions": [
+        "hc"
+      ],
       "category": "other",
       "pattern": "56 45 52 41",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "VeraCrypt encrypted volume",
       "enabled": true
@@ -412,10 +599,15 @@
     {
       "id": "sig-bitlocker",
       "name": "BitLocker Volume",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "2D 46 56 45 2D 46 53 2D",
-      "offset": { "type": "absolute", "value": 3 },
+      "offset": {
+        "type": "absolute",
+        "value": 3
+      },
       "confidence": 95,
       "notes": "Windows BitLocker encrypted volume",
       "enabled": true
@@ -423,10 +615,15 @@
     {
       "id": "sig-luks",
       "name": "LUKS Encrypted Volume",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "4C 55 4B 53 BA BE",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 95,
       "notes": "Linux LUKS encrypted partition",
       "enabled": true
@@ -434,10 +631,15 @@
     {
       "id": "sig-filevault",
       "name": "macOS FileVault",
-      "extensions": [""],
+      "extensions": [
+        ""
+      ],
       "category": "other",
       "pattern": "45 4E 43 52",
-      "offset": { "type": "absolute", "value": 0 },
+      "offset": {
+        "type": "absolute",
+        "value": 0
+      },
       "confidence": 90,
       "notes": "macOS FileVault encrypted volume",
       "enabled": true

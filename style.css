@@ -11,6 +11,9 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --radius:14px;
   --shadow: 0 10px 25px rgba(0,0,0,.06);
+  /* 部分表示のバナーと、終端が見つからない印。以前は未定義で背景が透けていた */
+  --warning-bg: #fff8e6;
+  --warning-fg: #7a4f00;
 }
 :root.dark{
   --bg:#0f172a;
@@ -23,6 +26,8 @@
   --danger:#ef4444;
   --code:#f8fafc;
   --shadow: 0 12px 28px rgba(0,0,0,.4);
+  --warning-bg: #3a2c12;
+  --warning-fg: #f0d9b5;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
@@ -2175,4 +2180,220 @@ footer{
   visibility: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
+}
+
+/* 終端の照合結果。見つからないときだけ目立たせる */
+.hit-trailer{
+  white-space: nowrap;
+}
+
+.hit-trailer.trailer-missing{
+  color: var(--warning-fg, #b3831f);
+  font-weight: 700;
+}
+
+/* 表の中央寄せ（以前は style 属性で書かれていた） */
+.cell-center{
+  text-align: center;
+}
+
+/* 大容量ファイルの部分表示バナー（以前は style 属性で書かれていた） */
+.hex-partial-banner{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  background: var(--warning-bg);
+  color: var(--warning-fg);
+  font-size: 12px;
+}
+
+/* ダブルタップの拡大抑止（document の touchend を使わない） */
+button, .btn, .main-tab, label{
+  touch-action: manipulation;
+}
+
+/* 割合が分からないときの進捗表示 */
+.progress-bar.indeterminate{
+  width: 40% !important;
+  animation: msi-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes msi-indeterminate{
+  0%   { margin-left: 0; }
+  50%  { margin-left: 60%; }
+  100% { margin-left: 0; }
+}
+
+/* 表の列幅（以前は style 属性で書かれていた。CSPの style-src-attr に触れる） */
+.col-w60{ width: 60px; }
+.col-w80{ width: 80px; }
+.col-w100{ width: 100px; }
+.col-min180{ min-width: 180px; }
+.col-min250{ min-width: 250px; }
+.mt-8{ margin-top: 8px; }
+
+/* 進捗バーは幅0から始める */
+.progress-bar{ width: 0; }
+
+/* 以前は style 属性で指定していたもの */
+.hash-text{ word-break: break-all; }
+.entropy-label{ font-size: 11px; color: var(--muted); }
+.hex-scroller{ position: relative; }
+.hex-content{ position: absolute; top: 0; left: 0; width: 100%; }
+
+/* コントラストの是正。いずれも計算して選んだ色。
+   バッジは 4.35 しかなく、完了ラベルと高信頼度バッジは 2.1〜2.3 だった。 */
+.badge{
+  color: #1d4ed8;   /* 薄青の地の上で 5.64 */
+}
+
+.hash-status.completed{
+  color: #15803d;   /* 白の上で 5.02 */
+}
+
+.format-badge.high-confidence{
+  color: #15803d;   /* 薄緑の地の上で 4.60 */
+}
+
+.format-badge.medium-confidence{
+  color: #7a5b00;   /* 薄黄の地の上で読める濃さ */
+}
+
+/* ダークで白文字を載せるボタンの地色。--accent のままだと 3.68 */
+:root.dark .btn.primary{
+  background: #2563eb;   /* 白文字で 5.17 */
+  border-color: #2563eb;
+}
+
+/* 操作要素の当たり判定をそろえる */
+.btn,
+select,
+input[type="text"],
+input[type="number"],
+input[type="search"],
+.main-tab{
+  min-height: 44px;
+}
+
+.btn-copy-hash{
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 辞書I/Oの2列組みが、狭い画面で押し広げられていた */
+.dictio-grid{
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+/* ダークでは上の濃い緑が沈む。地が #0f172a なので明るい側へ振る */
+:root.dark .hash-status.completed{
+  color: #4ade80;   /* 濃紺の上で 8.2 */
+}
+
+:root.dark .format-badge.high-confidence{
+  color: #4ade80;
+}
+
+:root.dark .format-badge.medium-confidence{
+  color: #fbbf24;
+}
+
+:root.dark .badge{
+  color: #93c5fd;
+}
+
+/* ボタンの見た目をしたリンクと、幅の足りない選択肢 */
+.exif-check-link{
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+#hexWidth{
+  min-width: 64px;
+}
+
+/* ファイル選択欄は既定の幅が327pxあり、狭い画面で箱を押し広げていた */
+#importFile,
+input[type="file"]{
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* ダークの削除ボタンは濃紺の上で 3.89 しかなかった */
+:root.dark .btn.danger{
+  color: #f87171;   /* 5.29 */
+}
+
+/* 一覧のチェックボックスは 16px だった。WCAG 2.2 の 2.5.8（AA）は 24px を求める */
+#sigTbody input[type="checkbox"],
+.sig-table input[type="checkbox"],
+thead input[type="checkbox"],
+#filterEnabled,
+#f_enabled,
+#setAutosave,
+#setFollowOS{
+  width: 24px;
+  height: 24px;
+}
+
+/* 幅100%の選択肢が枠からわずかにはみ出していた */
+select,
+input[type="text"],
+input[type="number"],
+input[type="search"]{
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 言語の切り替え。テーマの切り替えと同じ高さにそろえる */
+.lang-toggle{
+  min-height: 36px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+/* HEXビューのツールバー。1440pxの画面でもボタンの文字が折り返していた。
+   縮まない要素にはそれを伝え、伸びるのはジャンプ欄だけにする */
+.hex-toolbar{
+  flex-wrap: wrap;
+}
+.hex-toolbar .btn,
+.hex-toolbar > label > span{
+  white-space: nowrap;
+}
+.hex-toolbar #jumpPrev,
+.hex-toolbar #jumpNext,
+.hex-toolbar #jumpGo,
+.hex-toolbar .hex-copy-buttons,
+.hex-toolbar > label:not(.grow){
+  flex: 0 0 auto;
+}
+.hex-toolbar .grow{
+  flex: 1 1 220px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* HEX行がビューの幅を超え、ASCII欄が隠れていた。
+   16進の欄は中身のぶんだけ取り、余りをASCII欄に回す */
+.hex-data{
+  min-width: 0;
+  width: max-content;
+  flex: 0 0 auto;
+}
+.hex-ascii{
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+@media (min-width: 1201px){
+  /* HEXビューの側を広くする。ヒット一覧は6列で足りる */
+  .inspect-grid{ grid-template-columns: 1fr 1.6fr; }
 }
