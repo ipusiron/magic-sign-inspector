@@ -2244,3 +2244,108 @@ button, .btn, .main-tab, label{
 .entropy-label{ font-size: 11px; color: var(--muted); }
 .hex-scroller{ position: relative; }
 .hex-content{ position: absolute; top: 0; left: 0; width: 100%; }
+
+/* コントラストの是正。いずれも計算して選んだ色。
+   バッジは 4.35 しかなく、完了ラベルと高信頼度バッジは 2.1〜2.3 だった。 */
+.badge{
+  color: #1d4ed8;   /* 薄青の地の上で 5.64 */
+}
+
+.hash-status.completed{
+  color: #15803d;   /* 白の上で 5.02 */
+}
+
+.format-badge.high-confidence{
+  color: #15803d;   /* 薄緑の地の上で 4.60 */
+}
+
+.format-badge.medium-confidence{
+  color: #7a5b00;   /* 薄黄の地の上で読める濃さ */
+}
+
+/* ダークで白文字を載せるボタンの地色。--accent のままだと 3.68 */
+:root.dark .btn.primary{
+  background: #2563eb;   /* 白文字で 5.17 */
+  border-color: #2563eb;
+}
+
+/* 操作要素の当たり判定をそろえる */
+.btn,
+select,
+input[type="text"],
+input[type="number"],
+input[type="search"],
+.main-tab{
+  min-height: 44px;
+}
+
+.btn-copy-hash{
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 辞書I/Oの2列組みが、狭い画面で押し広げられていた */
+.dictio-grid{
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+
+/* ダークでは上の濃い緑が沈む。地が #0f172a なので明るい側へ振る */
+:root.dark .hash-status.completed{
+  color: #4ade80;   /* 濃紺の上で 8.2 */
+}
+
+:root.dark .format-badge.high-confidence{
+  color: #4ade80;
+}
+
+:root.dark .format-badge.medium-confidence{
+  color: #fbbf24;
+}
+
+:root.dark .badge{
+  color: #93c5fd;
+}
+
+/* ボタンの見た目をしたリンクと、幅の足りない選択肢 */
+.exif-check-link{
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+#hexWidth{
+  min-width: 64px;
+}
+
+/* ファイル選択欄は既定の幅が327pxあり、狭い画面で箱を押し広げていた */
+#importFile,
+input[type="file"]{
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* ダークの削除ボタンは濃紺の上で 3.89 しかなかった */
+:root.dark .btn.danger{
+  color: #f87171;   /* 5.29 */
+}
+
+/* 一覧のチェックボックスは 16px だった。WCAG 2.2 の 2.5.8（AA）は 24px を求める */
+#sigTbody input[type="checkbox"],
+.sig-table input[type="checkbox"],
+thead input[type="checkbox"],
+#filterEnabled,
+#f_enabled,
+#setAutosave,
+#setFollowOS{
+  width: 24px;
+  height: 24px;
+}
+
+/* 幅100%の選択肢が枠からわずかにはみ出していた */
+select,
+input[type="text"],
+input[type="number"],
+input[type="search"]{
+  max-width: 100%;
+  box-sizing: border-box;
+}

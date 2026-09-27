@@ -37,6 +37,7 @@ async function init(){
 
   // Tabs
   qsa(".main-tab").forEach(btn=>btn.addEventListener("click", onTab));
+  setupTabKeyboard();
 
   // File open
   qs("#openFileBtn").addEventListener("click", ()=>qs("#fileInput").click());
@@ -284,6 +285,40 @@ function applyTheme(mode){
 }
 
 /* ------------ Tabs ------------ */
+
+/**
+ * WAI-ARIAのタブは、左右のキーで移動し、Homeで先頭、Endで末尾へ行く。
+ * Tabキーで中身へ入れるよう、選ばれているタブだけがフォーカス順に入る。
+ */
+function setupTabKeyboard(){
+  const tabs = qsa(".main-tab");
+
+  const updateTabIndex = () => {
+    tabs.forEach(t => { t.tabIndex = t.classList.contains("active") ? 0 : -1; });
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("keydown", (e) => {
+      const last = tabs.length - 1;
+      let next = null;
+      if (e.key === "ArrowRight") next = index === last ? 0 : index + 1;
+      if (e.key === "ArrowLeft") next = index === 0 ? last : index - 1;
+      if (e.key === "Home") next = 0;
+      if (e.key === "End") next = last;
+      if (next === null) return;
+
+      e.preventDefault();
+      tabs[next].click();
+      updateTabIndex();
+      tabs[next].focus();
+    });
+  });
+
+  updateTabIndex();
+  document.addEventListener("msi:tabchanged", updateTabIndex);
+}
+
+
 function onTab(e){
   qsa(".main-tab").forEach(b=>{
     b.classList.remove("active");
@@ -294,6 +329,7 @@ function onTab(e){
   e.currentTarget.setAttribute("aria-selected", "true");
   const name = e.currentTarget.dataset.tab;
   qs(`#tab-${name}`).classList.add("active");
+  document.dispatchEvent(new CustomEvent("msi:tabchanged"));
   
   // Auto-switch to inspect tab when file is loaded
   if (name === "inspect" && STATE.file) {
