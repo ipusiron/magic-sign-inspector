@@ -55,6 +55,12 @@ Everything runs in your browser. No file you open is uploaded anywhere.
 
 ## 🛠 What it does
 
+Ways of using this tool in particular
+
+- Confirming that a shorter signature hits by chance more easily (false-positive and forensics classes): searching the 13-byte example `00 FF D8 FF E0 00 FF D8 11 00 FF D8 FF`, the 2-byte `FF D8` hits 3 times, at positions 1, 6 and 10, while the 4-byte `FF D8 FF E0` hits once, at position 1. You can confirm by the hit count that a shorter signature hits unrelated data more easily and raises false positives in carving
+- Confirming the magic number in hex turned into bytes (encoding and file-format classes): searching `FF D8 FF` in hex gives the bytes `255 216 255`. This is the magic number always at the start of a JPEG file. You can confirm, by the hex-to-byte mapping, how a file format is told apart by the first few bytes rather than by the characters you see
+- Confirming that a wildcard maps to foremost's notation (tool-integration classes): a signature with any single byte written as `??`, like `FF D8 FF ?? E0`, is converted to `\xff\xd8\xff?\xe0` for foremost. You can confirm by the conversion that this tool's `??` maps to the `?` in the config file of the carving tool foremost
+
 ### Inspecting a file
 
 - **184 signatures included** (181 enabled by default): 29 image, 26 archive, 20 document, 17 audio, 14 video, 78 other
