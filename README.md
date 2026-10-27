@@ -192,6 +192,7 @@ magic-sign-inspector/
 │   ├── fileinfo.js             # ファイル情報・ハッシュ・Exif連携
 │   ├── hexview.js              # HEXビューア（仮想スクロール対応）
 │   ├── shortcuts.js            # キーボード操作
+│   ├── theme-init.js           # 最初の描画の前にテーマを決める（<head>で読み込む）
 │   └── worker.js               # WebWorker（走査の本体）
 │   #  ↑ dict.js 以下の5つはDOMに触れないので、そのままテストできる
 ├── sigs/                       # シグネチャ辞書（合計184件）
@@ -199,7 +200,7 @@ magic-sign-inspector/
 │   ├── enhanced.json           # 拡張画像・アーカイブ形式（67件）
 │   ├── forensics.json          # フォレンジック特化形式（40件）
 │   └── trailers.json           # 終端シグネチャ（23件）
-└── test/                       # node --test で動く（依存パッケージなし・93件）
+└── test/                       # node --test で動く（依存パッケージなし・100件）
     ├── scan.test.js            # 走査・終端の照合・相対オフセット
     ├── dict.test.js            # 辞書の検証
     ├── foremost.test.js        # foremost.conf の読み書き
@@ -208,7 +209,8 @@ magic-sign-inspector/
     ├── extcheck.test.js        # 拡張子とのくい違い
     ├── batch.test.js           # 一括チェックとCSV
     ├── entropy.test.js         # 区間ごとのエントロピー
-    └── i18n.test.js            # 辞書の欠けを拾う
+    ├── i18n.test.js            # 辞書の欠けを拾う
+    └── theme-init.test.js      # テーマの初期判定と<head>での読み込み位置
 ```
 
 ---
