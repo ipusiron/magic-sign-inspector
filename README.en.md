@@ -142,7 +142,7 @@ No dependencies; the tests run on Node's own runner.
 npm test
 ```
 
-93 tests in all.
+100 tests in all.
 
 | File | What it covers |
 |------|----------------|
@@ -155,6 +155,7 @@ npm test
 | `test/batch.test.js` | batch rows, and CSV cells that a spreadsheet would otherwise execute |
 | `test/entropy.test.js` | entropy per block, and the minimum block size |
 | `test/i18n.test.js` | the Japanese and English dictionaries hold the same keys, and every key the UI asks for exists |
+| `test/theme-init.test.js` | the initial theme decision, and loading it in `<head>` after the stylesheet |
 
 Contrast, tap target sizes, narrow screens and CSP violations are checked by hand with Playwright rather than in these tests.
 
@@ -179,6 +180,7 @@ magic-sign-inspector/
 │   ├── fileinfo.js             # file details, hashes, Exif link
 │   ├── hexview.js              # hex view with virtual scrolling
 │   ├── shortcuts.js            # keyboard
+│   ├── theme-init.js           # theme decision before the first paint (loaded in <head>)
 │   └── worker.js               # the scan itself
 │   #  the five above fileinfo.js touch no DOM, so they are tested directly
 ├── sigs/                       # 184 signatures in four files

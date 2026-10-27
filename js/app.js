@@ -27,8 +27,13 @@ let STATE = {
   hits: [],
   selectedHitIndex: null, // -1 = no selection (show all), null = no hits, >=0 = specific hit
   batch: [], // 一括チェックの結果
-  theme: (localStorage.getItem("msi_theme") || "auto")
+  theme: readSavedTheme()
 };
+
+// 保存したテーマ。読めない環境では "auto"（js/theme-init.js と同じ扱い）
+function readSavedTheme(){
+  try { return localStorage.getItem("msi_theme") || "auto"; } catch (e) { return "auto"; }
+}
 
 window.addEventListener("DOMContentLoaded", init);
 
@@ -48,8 +53,7 @@ async function init(){
     renderEntropyChart();
   });
 
-  // Theme
-  applyTheme(STATE.theme);
+  // Theme。最初のテーマは js/theme-init.js が <head> で付けたので、ここではチェックボックスを合わせるだけ
   qs("#toggleTheme").checked = document.documentElement.classList.contains("dark");
   qs("#toggleTheme").addEventListener("change", onToggleTheme);
 
@@ -304,7 +308,7 @@ function onToggleTheme(e){
   const mode = checked ? "dark" : "light";
   STATE.theme = mode;
   applyTheme(mode);
-  localStorage.setItem("msi_theme", mode);
+  try { localStorage.setItem("msi_theme", mode); } catch (err) { /* 保存できなくても切り替えは効く */ }
 }
 function applyTheme(mode){
   const preferDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
