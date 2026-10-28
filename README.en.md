@@ -142,7 +142,7 @@ No dependencies; the tests run on Node's own runner.
 npm test
 ```
 
-100 tests in all.
+106 tests in all.
 
 | File | What it covers |
 |------|----------------|
@@ -156,6 +156,10 @@ npm test
 | `test/entropy.test.js` | entropy per block, and the minimum block size |
 | `test/i18n.test.js` | the Japanese and English dictionaries hold the same keys, and every key the UI asks for exists |
 | `test/theme-init.test.js` | the initial theme decision, and loading it in `<head>` after the stylesheet |
+| `test/theme-mode.test.js` | the dark-mode switch and "Follow the OS theme": saving, following OS changes, and fixing the theme by hand |
+| `test/readme.test.js` | recalculating the values in the README examples with the tool's own code |
+
+`test/helper.js` loads the worker and the dictionaries in Node for these tests.
 
 Contrast, tap target sizes, narrow screens and CSP violations are checked by hand with Playwright rather than in these tests.
 

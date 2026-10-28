@@ -54,8 +54,10 @@ async function init(){
   });
 
   // Theme。最初のテーマは js/theme-init.js が <head> で付けたので、ここではチェックボックスを合わせるだけ
-  qs("#toggleTheme").checked = document.documentElement.classList.contains("dark");
+  syncThemeControls();
   qs("#toggleTheme").addEventListener("change", onToggleTheme);
+  qs("#setFollowOS").addEventListener("change", onFollowOSChange);
+  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", onOSThemeChange);
 
   // HexView
   STATE.hex = new HexView(qs("#hexView"));
@@ -114,7 +116,6 @@ async function init(){
   // Settings
   qs("#setHexWidth").addEventListener("change", e=>{STATE.hex.setWidth(e.target.value); qs("#hexWidth").value = e.target.value;});
   qs("#setAutosave").addEventListener("change", saveLocal);
-  qs("#setFollowOS").addEventListener("change", saveLocal);
 
   // Mobile touch improvements
   initMobileTouchHandlers();
@@ -303,12 +304,31 @@ function showHitContextMenu(row) {
   }, 5000);
 }
 
-function onToggleTheme(e){
-  const checked = e.target.checked;
-  const mode = checked ? "dark" : "light";
+// テーマの保存値は msi_theme の "auto"（OS に従う）・"dark"・"light" の3つ。
+// ヘッダーのダーク切り替えは見た目、設定の「OSテーマを追従」は auto かどうかを表す
+function setThemeMode(mode){
   STATE.theme = mode;
   applyTheme(mode);
   try { localStorage.setItem("msi_theme", mode); } catch (err) { /* 保存できなくても切り替えは効く */ }
+  syncThemeControls();
+}
+function syncThemeControls(){
+  qs("#toggleTheme").checked = document.documentElement.classList.contains("dark");
+  qs("#setFollowOS").checked = STATE.theme === "auto";
+}
+function onToggleTheme(e){
+  // 手で切り替えたら OS には従わない
+  setThemeMode(e.target.checked ? "dark" : "light");
+}
+function onFollowOSChange(e){
+  // 外したときは、いまの見た目のまま手動に固定する
+  const current = document.documentElement.classList.contains("dark") ? "dark" : "light";
+  setThemeMode(e.target.checked ? "auto" : current);
+}
+function onOSThemeChange(){
+  if (STATE.theme !== "auto") return;
+  applyTheme("auto");
+  syncThemeControls();
 }
 function applyTheme(mode){
   const preferDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
