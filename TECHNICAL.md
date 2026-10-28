@@ -336,8 +336,11 @@ npm test
 | `test/batch.test.js` | 一括の行の組み立てと、表計算ソフトが数式として実行しうるセルの無害化 |
 | `test/entropy.test.js` | 区間ごとのエントロピー。区間が小さくなりすぎない下限 |
 | `test/i18n.test.js` | 日英でキーの集合と差し込みが一致すること、HTMLとスクリプトが指すキーが辞書にあること |
+| `test/theme-init.test.js` | 最初の描画の前のテーマの判定と、`<head>` の stylesheet の直後で読み込むこと |
+| `test/theme-mode.test.js` | ダーク切り替えと「OSテーマを追従」。保存値（auto・dark・light）、OS の変化への追従、手動での固定 |
+| `test/readme.test.js` | README の例の値を計算部で再計算すること |
 
-合計93件。
+合計106件。
 
 Worker は素のスクリプトなので、`new Function` で読み込んで関数を取り出す（`test/helper.js`）。
 `i18n.js` も同じ方法で読むため、`window` も `localStorage` も無い環境で読めることが、

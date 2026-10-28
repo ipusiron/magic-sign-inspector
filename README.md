@@ -200,7 +200,7 @@ magic-sign-inspector/
 │   ├── enhanced.json           # 拡張画像・アーカイブ形式（67件）
 │   ├── forensics.json          # フォレンジック特化形式（40件）
 │   └── trailers.json           # 終端シグネチャ（23件）
-└── test/                       # node --test で動く（依存パッケージなし・100件）
+└── test/                       # node --test で動く（依存パッケージなし・106件）
     ├── scan.test.js            # 走査・終端の照合・相対オフセット
     ├── dict.test.js            # 辞書の検証
     ├── foremost.test.js        # foremost.conf の読み書き
@@ -210,7 +210,10 @@ magic-sign-inspector/
     ├── batch.test.js           # 一括チェックとCSV
     ├── entropy.test.js         # 区間ごとのエントロピー
     ├── i18n.test.js            # 辞書の欠けを拾う
-    └── theme-init.test.js      # テーマの初期判定と<head>での読み込み位置
+    ├── theme-init.test.js      # テーマの初期判定と<head>での読み込み位置
+    ├── theme-mode.test.js      # ダーク切り替えと「OSテーマを追従」の動き
+    ├── readme.test.js          # READMEの例の値を計算部で再計算
+    └── helper.js               # Worker・辞書を Node で読むための補助
 ```
 
 ---
